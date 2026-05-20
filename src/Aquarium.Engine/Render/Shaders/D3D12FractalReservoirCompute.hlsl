@@ -85,9 +85,11 @@ float3 FractalPoint(uint index, out float radius)
         float s = transform.rotationDomain.y;
         float2 local = float2(rx * transform.radiiRotationFalloff.x, ry * transform.radiiRotationFalloff.y) * 0.65;
         float2 rotated = float2((local.x * c) - (local.y * s), (local.x * s) + (local.y * c));
-        radius = max(max(transform.radiiRotationFalloff.x, transform.radiiRotationFalloff.y) * (0.34 + Random01(h + 104729u) * 0.16), 0.0001);
-        float z = transform.offsetScaleAmplitude.w + (Random01(h + 1299721u) - 0.5) * radius * 0.2;
-        return float3(transform.offsetScaleAmplitude.xy + rotated, z + transform.materialSeedShape.x * 0.05);
+        radius = max(max(transform.radiiRotationFalloff.x, transform.radiiRotationFalloff.y) * (0.045 + Random01(h + 104729u) * 0.02), 0.0001);
+        float relief = transform.offsetScaleAmplitude.w * 0.06 + (Random01(h + 1299721u) - 0.5) * radius * 0.25;
+        float2 surfacePoint = transform.offsetScaleAmplitude.xy + rotated;
+        float3 dir = normalize(float3(surfacePoint.x, surfacePoint.y, 1.0 + relief));
+        return dir * (1.0 + relief + transform.materialSeedShape.x * 0.012);
     }
 
     if (ProgramTransformCount > 0u)

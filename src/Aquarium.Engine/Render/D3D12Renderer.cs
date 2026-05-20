@@ -609,7 +609,8 @@ public sealed class D3D12Renderer : IAquariumRenderer
                 activeFractalReservoirField.HasInput ? activeFractalReservoirField.SplatCount : 0,
                 visibleFractalSplatCount,
                 activeFractalReservoirField.HasInput ? activeFractalReservoirField.ReservoirUpdatesPerPass : 0,
-                activeFractalReservoirField.HasInput ? activeFractalReservoirField.CandidatesPerReservoirUpdate : 0)));
+                activeFractalReservoirField.HasInput ? activeFractalReservoirField.CandidatesPerReservoirUpdate : 0),
+            activeFractalReservoirField.HasInput ? activeFractalReservoirField.WorldCenterRadius : Vector4.Zero));
         frameResources.FrameConstantsDescriptor = frameResources.TransientShaderDescriptors.Allocate();
         device.CreateConstantBufferView(
             new ConstantBufferViewDescription(frameConstants.GpuVirtualAddress, frameConstants.SizeInBytes),
@@ -2864,7 +2865,8 @@ public sealed class D3D12Renderer : IAquariumRenderer
         Vector4 CursorWorlds,
         Vector4 TemporalGaussianInfo,
         Vector4 GpuFusionInfo,
-        Vector4 FractalReservoirInfo);
+        Vector4 FractalReservoirInfo,
+        Vector4 FractalReservoirFrame);
 
     private sealed record D3D12ShaderPaths(
         string HeightField,

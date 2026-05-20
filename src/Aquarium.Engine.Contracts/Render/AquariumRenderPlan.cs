@@ -459,6 +459,8 @@ public sealed class AquariumFractalReservoirField
 
     public IReadOnlyList<AquariumPackedFractalIfsTransform> ProgramTransforms { get; init; } = [];
 
+    public Vector4 WorldCenterRadius { get; init; }
+
     public bool HasInput =>
         SplatCount > 0 &&
         Depth > 0 &&

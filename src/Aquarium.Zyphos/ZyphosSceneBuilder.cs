@@ -15,7 +15,8 @@ public static class ZyphosSceneBuilder
             FractalReservoirField = new AquariumFractalReservoirField
             {
                 SplatCount = 2_000_000,
-                ReservoirUpdatesPerPass = 50_000,
+                ReservoirUpdatesPerPass = 20_000,
+                WorldCenterRadius = new Vector4(ZyphosUmbrosSystem.ZyphosCenter, ZyphosUmbrosSystem.ZyphosSurfaceRadius),
                 ProgramTransforms = fractalPlan.GpuProgramTransforms,
             },
             SdfObjects = BuildSdfObjects(timeSeconds, previousTimeSeconds),
@@ -25,22 +26,11 @@ public static class ZyphosSceneBuilder
 
     private static AquariumSdfObject[] BuildSdfObjects(float timeSeconds, float previousTimeSeconds)
     {
-        var planetCenter = ZyphosUmbrosSystem.ZyphosCenter;
         var rotation = ZyphosUmbrosSystem.MutualPhase(timeSeconds);
-        var umbrosCenter = ZyphosUmbrosSystem.UmbrosCenter(timeSeconds);
-        var previousUmbrosCenter = ZyphosUmbrosSystem.UmbrosCenter(previousTimeSeconds);
         var starCenter = ZyphosUmbrosSystem.PrimaryStarCenter(timeSeconds);
         var previousStarCenter = ZyphosUmbrosSystem.PrimaryStarCenter(previousTimeSeconds);
 
         var objects = new AquariumSdfObject[ZyphosRenderPlan.SdfObjectCount];
-        objects[ZyphosRenderPlan.PlanetIndex] = new AquariumSdfObject(
-            new Vector4(planetCenter, ZyphosUmbrosSystem.ZyphosBoundRadius),
-            new Vector4(planetCenter, 0.0f),
-            new Vector4(ZyphosUmbrosSystem.ZyphosSurfaceRadius, rotation, ZyphosUmbrosSystem.SeaLevel, rotation));
-        objects[ZyphosRenderPlan.UmbrosIndex] = new AquariumSdfObject(
-            new Vector4(umbrosCenter, ZyphosUmbrosSystem.UmbrosBoundRadius),
-            new Vector4(previousUmbrosCenter, 0.0f),
-            new Vector4(ZyphosUmbrosSystem.UmbrosSurfaceRadius, rotation, ZyphosUmbrosSystem.CenterSeparation, 0.0f));
         objects[ZyphosRenderPlan.StarIndex] = new AquariumSdfObject(
             new Vector4(starCenter, ZyphosUmbrosSystem.PrimaryStarVisualRadius),
             new Vector4(previousStarCenter, 0.0f),
