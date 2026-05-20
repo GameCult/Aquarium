@@ -459,6 +459,7 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
         for (var index = 0; index < views.Count; index++)
         {
             viewReceipts[index] = BuildVisualParityView(
+                options,
                 views[index],
                 referencePoints,
                 points,
@@ -487,6 +488,7 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
     }
 
     private static VisualParityViewReceipt BuildVisualParityView(
+        ReceiptOptions options,
         VisualParityView view,
         IReadOnlyList<Vector2> referencePoints,
         IReadOnlyList<Vector2> gpuPoints,
@@ -495,6 +497,7 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
     {
         var referenceHistogram = FractalPointHistogramBuilder.Build(referencePoints, width, height, view.Bounds);
         var gpuHistogram = FractalPointHistogramBuilder.Build(gpuPoints, width, height, view.Bounds);
+        WriteVisualParityImages(options, view.Name, referenceHistogram, gpuHistogram);
         var metrics = CompareHistograms(referenceHistogram, gpuHistogram);
         return new VisualParityViewReceipt(
             view.Name,
@@ -517,6 +520,66 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
             metrics.Rmse,
             metrics.CosineSimilarity,
             metrics.DistributionScorePercent);
+    }
+
+    private static void WriteVisualParityImages(
+        ReceiptOptions options,
+        string viewName,
+        FractalPointHistogram referenceHistogram,
+        FractalPointHistogram gpuHistogram)
+    {
+        if (options.VisualParityImageDirectory is null)
+        {
+            return;
+        }
+
+        Directory.CreateDirectory(options.VisualParityImageDirectory);
+        var safeViewName = SanitizeFileSegment(viewName);
+        var safePrefix = SanitizeFileSegment(options.VisualParityImagePrefix);
+        WriteHistogramPpm(
+            Path.Combine(options.VisualParityImageDirectory, $"{safePrefix}-{safeViewName}-reference.ppm"),
+            referenceHistogram,
+            new Vector3(0.45f, 0.86f, 1.0f));
+        WriteHistogramPpm(
+            Path.Combine(options.VisualParityImageDirectory, $"{safePrefix}-{safeViewName}-aquarium.ppm"),
+            gpuHistogram,
+            new Vector3(1.0f, 0.68f, 0.28f));
+    }
+
+    private static void WriteHistogramPpm(string path, FractalPointHistogram histogram, Vector3 color)
+    {
+        const int scale = 4;
+        var width = histogram.Width * scale;
+        var height = histogram.Height * scale;
+        var max = histogram.Bins.Max();
+        using var stream = File.Create(path);
+        using var writer = new StreamWriter(stream, System.Text.Encoding.ASCII, leaveOpen: true);
+        writer.Write($"P6\n{width} {height}\n255\n");
+        writer.Flush();
+        var row = new byte[width * 3];
+        for (var y = 0; y < height; y++)
+        {
+            Array.Clear(row);
+            var binY = histogram.Height - 1 - (y / scale);
+            for (var x = 0; x < width; x++)
+            {
+                var binX = x / scale;
+                var value = histogram.Bins[(binY * histogram.Width) + binX];
+                var normalized = max <= 0 ? 0.0 : Math.Sqrt(Math.Log(1.0 + value) / Math.Log(1.0 + max));
+                var offset = x * 3;
+                row[offset] = (byte)Math.Clamp((int)(normalized * color.X * 255.0), 0, 255);
+                row[offset + 1] = (byte)Math.Clamp((int)(normalized * color.Y * 255.0), 0, 255);
+                row[offset + 2] = (byte)Math.Clamp((int)(normalized * color.Z * 255.0), 0, 255);
+            }
+
+            stream.Write(row);
+        }
+    }
+
+    private static string SanitizeFileSegment(string value)
+    {
+        var chars = value.Select(ch => char.IsLetterOrDigit(ch) || ch is '-' or '_' ? ch : '-').ToArray();
+        return new string(chars).Trim('-') is { Length: > 0 } sanitized ? sanitized : "view";
     }
 
     private static HistogramComparison CompareHistograms(FractalPointHistogram reference, FractalPointHistogram candidate)
@@ -666,7 +729,9 @@ internal sealed record ReceiptOptions(
     Vector4 HistogramBounds,
     bool VisualParity,
     int VisualParityReferenceSamples,
-    IReadOnlyList<VisualParityView> VisualParityViews)
+    IReadOnlyList<VisualParityView> VisualParityViews,
+    string? VisualParityImageDirectory,
+    string VisualParityImagePrefix)
 {
     public static ReceiptOptions Parse(string[] args)
     {
@@ -694,7 +759,9 @@ internal sealed record ReceiptOptions(
             new Vector4(-8.0f, -8.0f, 8.0f, 8.0f),
             false,
             1_000_000,
-            []);
+            [],
+            null,
+            "visual-parity");
         for (var index = 0; index < args.Length; index++)
         {
             var arg = args[index];
@@ -723,6 +790,8 @@ internal sealed record ReceiptOptions(
                 "--visual-parity" => options with { VisualParity = true },
                 "--visual-parity-reference-samples" => options with { VisualParityReferenceSamples = int.Parse(Next()) },
                 "--visual-parity-view" => AddVisualParityView(options, Next()),
+                "--visual-parity-image-dir" => options with { VisualParityImageDirectory = Next() },
+                "--visual-parity-image-prefix" => options with { VisualParityImagePrefix = Next() },
                 _ => throw new ArgumentException($"Unknown receipt option: {arg}"),
             };
         }

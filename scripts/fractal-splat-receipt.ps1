@@ -13,6 +13,8 @@ param(
     [string]$HistogramSize = "64x64",
     [string]$HistogramBounds = "-8,-8,8,8",
     [string[]]$VisualParityView = @(),
+    [string]$VisualParityImageDirectory = "",
+    [string]$VisualParityImagePrefix = "visual-parity",
     [int]$ReadbackSplats = 64
 )
 
@@ -34,6 +36,10 @@ if ($VisualParity) {
     )
     foreach ($view in $VisualParityView) {
         $parityArgs += @("--visual-parity-view", $view)
+    }
+    if (-not [string]::IsNullOrWhiteSpace($VisualParityImageDirectory)) {
+        $parityImageDir = if ([System.IO.Path]::IsPathRooted($VisualParityImageDirectory)) { $VisualParityImageDirectory } else { Join-Path $repoRoot $VisualParityImageDirectory }
+        $parityArgs += @("--visual-parity-image-dir", $parityImageDir, "--visual-parity-image-prefix", $VisualParityImagePrefix)
     }
 }
 
