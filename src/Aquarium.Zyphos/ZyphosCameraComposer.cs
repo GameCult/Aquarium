@@ -33,7 +33,7 @@ public static class ZyphosCameraComposer
         var effectiveDistance = Math.Clamp(requestedDistance, minimumDistance, maximumDistance);
         var orbitDirection = OrbitDirection(yaw, pitch);
         var cameraPosition = parent + orbitDirection * effectiveDistance;
-        return new ZyphosCameraShot(cameraPosition, parent, parent, tracked, effectiveDistance, minimumDistance, maximumDistance, domain.Key, domain.ParentKey);
+        return new ZyphosCameraShot(cameraPosition, tracked, parent, tracked, effectiveDistance, minimumDistance, maximumDistance, domain.Key, domain.ParentKey);
     }
 
     public static string DisplayName(ZyphosSpatialDomainKey domainKey)

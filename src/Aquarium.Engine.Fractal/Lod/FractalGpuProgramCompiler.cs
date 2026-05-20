@@ -49,15 +49,18 @@ public static class FractalGpuProgramCompiler
     {
         var radius = MathF.Max(claim.Radii.X, claim.Radii.Y);
         var material = StableUnit(claim.Tags, claim.Seed);
-        var domain = domains.TryGetValue(claim.DomainKey, out var domainRow)
+        var tileAddress = domains.TryGetValue(claim.DomainKey, out var domainRow)
+            && domainRow.Kind == AquariumFractalDomainKind.CubeSphereTile
             ? domainRow.Parameters0
-            : Vector4.Zero;
+            : new Vector4((float)CubeFace.PositiveZ, 0.0f, 0.0f, 0.0f);
+        var rotationCos = MathF.Cos(claim.RotationRadians);
+        var rotationSin = MathF.Sin(claim.RotationRadians);
 
         return new AquariumPackedFractalIfsTransform(
             new Vector4(claim.Center, radius, claim.Amplitude),
             new Vector4(claim.Radii, claim.RotationRadians, claim.Falloff),
-            new Vector4(material, claim.Seed, claim.ShapePower, (float)claim.PayloadKind),
-            new Vector4(MathF.Cos(claim.RotationRadians), MathF.Sin(claim.RotationRadians), domain.X, domain.Y));
+            new Vector4(material, claim.Seed, rotationCos, rotationSin),
+            tileAddress);
     }
 
     private static float StableUnit(string tags, int seed)

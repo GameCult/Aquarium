@@ -97,6 +97,15 @@ void cameraBasis(float3 camera, float3 target, out float3 forward, out float3 ri
     up = cross(right, forward);
 }
 
+float4 projectWorld(float3 world, float3 camera, float3 forward, float3 right, float3 up, out float travel)
+{
+    float3 delta = world - camera;
+    travel = max(dot(delta, forward), 0.0001);
+    float2 projected = float2(dot(delta, right), dot(delta, up)) / travel * 1.6;
+    float clipAspect = resolution.x / max(resolution.y, 1.0);
+    return float4(projected.x / clipAspect, projected.y, saturate(travel / max(farDistance, 0.0001)), 1.0);
+}
+
 uint VisibleSplatIndex(uint instanceId)
 {
     uint splatCount = max((uint)fractalReservoirInfo.x, 1u);
@@ -128,25 +137,25 @@ FractalSplatVertexOut D3D12FractalSplatVS(uint vertexId : SV_VertexID, uint inst
     float fieldRadius = fractalReservoirFrame.w > 0.0 ? fractalReservoirFrame.w : max(viewRadius * 0.16, 0.05);
     float3 fieldCenter = fractalReservoirFrame.w > 0.0 ? fractalReservoirFrame.xyz : cameraTarget;
     float3 center = fieldCenter + centerRadius.xyz * fieldRadius;
-    float3 delta = center - cameraPosition;
-    float z = max(dot(delta, forward), 0.0001);
-    float2 projected = float2(dot(delta, right), dot(delta, up)) / z * 1.6;
-    float clipAspect = resolution.x / max(resolution.y, 1.0);
-    float boundRadius = max(centerRadius.w * fieldRadius * 0.72, 0.00035 * viewRadius);
-    float projectedRadius = boundRadius / z * 1.6 + 0.002;
-    float2 clipCenter = float2(projected.x / clipAspect, projected.y);
-    float2 clipRadius = float2(projectedRadius / clipAspect, projectedRadius);
+    float3 surfaceNormal = normalize(centerRadius.xyz);
+    float3 referenceUp = abs(surfaceNormal.z) < 0.92 ? float3(0.0, 0.0, 1.0) : float3(0.0, 1.0, 0.0);
+    float3 tangentRight = normalize(cross(referenceUp, surfaceNormal));
+    float3 tangentUp = normalize(cross(surfaceNormal, tangentRight));
+    float boundRadius = max(centerRadius.w * fieldRadius * 1.25, 0.035 * fieldRadius);
+    float3 cornerWorld = center + ((tangentRight * corners[vertexId].x) + (tangentUp * corners[vertexId].y)) * boundRadius;
+    float z;
+    float4 projectedCorner = projectWorld(cornerWorld, cameraPosition, forward, right, up, z);
 
     FractalSplatVertexOut output;
-    output.position = float4(clipCenter + corners[vertexId] * clipRadius, 0.0, 1.0);
+    output.position = projectedCorner;
     output.splatIndex = splatIndex;
     output.quad = corners[vertexId];
     output.travel = z;
     output.centerWorld = center;
     output.worldRadius = boundRadius;
-    output.basisRight = right;
-    output.basisUp = up;
-    output.basisForward = forward;
+    output.basisRight = tangentRight;
+    output.basisUp = tangentUp;
+    output.basisForward = surfaceNormal;
     return output;
 }
 
@@ -167,13 +176,15 @@ SceneOut D3D12FractalSplatPS(FractalSplatVertexOut input)
     bool pbrResident = pbr.weightTargetCount.z > 0.5;
     bool radiosityResident = radiosity.weightTargetCount.z > 0.5;
     float surfaceZ = sqrt(saturate(1.0 - r2));
-    float3 normal = normalize((input.basisRight * input.quad.x) + (input.basisUp * input.quad.y) - (input.basisForward * surfaceZ));
-    float3 surfaceWorld = input.centerWorld + normal * input.worldRadius;
+    float3 tangentOffset = (input.basisRight * input.quad.x) + (input.basisUp * input.quad.y);
+    float3 normal = normalize(input.basisForward * (0.92 + surfaceZ * 0.08) + tangentOffset * 0.16);
+    float3 surfaceWorld = input.centerWorld + tangentOffset * input.worldRadius;
     float edgeCoverage = smoothstep(1.0, 0.82, r2);
     float viewFacing = saturate(dot(normalize(cameraPosition - surfaceWorld), normal));
+    float starFacing = saturate(dot(normal, normalize(float3(0.25, 0.006, 0.077) - surfaceWorld)));
     float material = saturate(splat.materialConfidence.x);
-    float3 fallbackColor = lerp(float3(0.05, 0.42, 1.0), float3(1.0, 0.72, 0.18), material);
-    float3 pbrColor = saturate(pbr.baseColorRoughMetal.rgb);
+    float3 fallbackColor = lerp(float3(0.08, 0.38, 0.18), float3(0.78, 0.61, 0.32), material);
+    float3 pbrColor = lerp(float3(0.06, 0.30, 0.14), saturate(pbr.baseColorRoughMetal.rgb), 0.72);
     float3 radiosityColor = saturate(radiosity.radianceDistance.rgb);
     float reservoirConfidence = min(
         sdfResident ? saturate(sdf.validation.x) : 0.0,
@@ -182,12 +193,12 @@ SceneOut D3D12FractalSplatPS(FractalSplatVertexOut input)
             radiosityResident ? saturate(radiosity.validation.x) : 0.0));
     float3 color = pbrResident ? pbrColor : fallbackColor;
     float roughness = pbrResident ? saturate(pbr.baseColorRoughMetal.w) : 0.6;
-    float diffuse = 0.28 + 0.72 * viewFacing;
-    float fresnel = pow(saturate(1.0 - viewFacing), 5.0);
-    float3 litColor = color * diffuse;
+    float diffuse = 0.32 + 0.50 * starFacing + 0.18 * viewFacing;
+    float fresnel = pow(saturate(1.0 - viewFacing), 2.2);
+    float3 litColor = color * diffuse + color * 0.18;
     litColor += radiosityResident ? radiosityColor * (0.24 + reservoirConfidence * 0.48) : 0.0;
-    litColor += lerp(float3(0.02, 0.08, 0.14), float3(0.28, 0.42, 0.58), 1.0 - roughness) * fresnel * 0.35;
-    float opacity = saturate(edgeCoverage * (0.62 + reservoirConfidence * 0.38));
+    litColor += lerp(float3(0.015, 0.06, 0.05), float3(0.24, 0.30, 0.20), 1.0 - roughness) * fresnel * 0.48;
+    float opacity = saturate(edgeCoverage * (0.78 + reservoirConfidence * 0.22));
 
     SceneOut output;
     output.colorTravel = float4(litColor * opacity, min(input.travel - surfaceZ * input.worldRadius, farDistance + 1.0));
@@ -198,6 +209,6 @@ SceneOut D3D12FractalSplatPS(FractalSplatVertexOut input)
         pbrResident ? saturate(pbr.validation.x) : 0.0,
         radiosityResident ? saturate(radiosity.validation.x) : 0.0,
         reservoirConfidence);
-    output.depth = saturate((input.travel - surfaceZ * input.worldRadius) / max(farDistance, 0.0001));
+    output.depth = saturate(input.travel / max(farDistance, 0.0001));
     return output;
 }

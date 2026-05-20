@@ -37,7 +37,7 @@ public sealed class D3D12Renderer : IAquariumRenderer
     private const int MaxAcousticConstraintCount = 128;
     private const int GpuSensorSamplesPerTexture = 131_072;
     private const int MaxTemporalGaussianCount = 1_048_576;
-    private const int MaxVisibleFractalSplatCount = 131_072;
+    private const int MaxVisibleFractalSplatCount = 524_288;
     private const float SurfaceTransparentMinZ = -1.85f;
     private const float SurfaceTransparentMaxZ = 0.45f;
     private const int BloomLevelCount = 3;

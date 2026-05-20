@@ -36,7 +36,7 @@ struct FractalIfsTransform
     float4 offsetScaleAmplitude;
     float4 radiiRotationFalloff;
     float4 materialSeedShape;
-    float4 rotationDomain;
+    float4 tileAddress;
 };
 
 cbuffer ReceiptConstants : register(b0)
@@ -72,6 +72,46 @@ float Random01(uint value)
     return (float)(Hash(value) & 16777215u) / 16777216.0;
 }
 
+float2 CubeTileFaceUv(float2 authoredPoint, float4 tileAddress)
+{
+    float level = max(tileAddress.y, 0.0);
+    float axisTileCount = exp2(level);
+    float2 tile = tileAddress.zw;
+    float2 local01 = saturate((authoredPoint / 32.0) * 0.5 + 0.5);
+    return -1.0 + 2.0 * ((tile + local01) / max(axisTileCount, 1.0));
+}
+
+float3 CubeSphereDirection(float face, float2 uv)
+{
+    uint f = (uint)round(face);
+    if (f == 0u)
+    {
+        return normalize(float3(1.0, uv.y, -uv.x));
+    }
+
+    if (f == 1u)
+    {
+        return normalize(float3(-1.0, uv.y, uv.x));
+    }
+
+    if (f == 2u)
+    {
+        return normalize(float3(uv.x, 1.0, -uv.y));
+    }
+
+    if (f == 3u)
+    {
+        return normalize(float3(uv.x, -1.0, uv.y));
+    }
+
+    if (f == 5u)
+    {
+        return normalize(float3(uv.x, uv.y, -1.0));
+    }
+
+    return normalize(float3(uv.x, uv.y, 1.0));
+}
+
 float3 FractalPoint(uint index, out float radius)
 {
     if (ProgramTransformCount > 0u && ProgramMode == 1u)
@@ -81,14 +121,16 @@ float3 FractalPoint(uint index, out float radius)
         FractalIfsTransform transform = ProgramTransforms[transformIndex];
         float rx = Random01(h + FrameIndex * 17u) * 2.0 - 1.0;
         float ry = Random01(h + 7919u) * 2.0 - 1.0;
-        float c = transform.rotationDomain.x;
-        float s = transform.rotationDomain.y;
+        float c = transform.materialSeedShape.z;
+        float s = transform.materialSeedShape.w;
+        float tileScale = 1.0 / max(exp2(max(transform.tileAddress.y, 0.0)), 1.0);
         float2 local = float2(rx * transform.radiiRotationFalloff.x, ry * transform.radiiRotationFalloff.y) * 0.65;
         float2 rotated = float2((local.x * c) - (local.y * s), (local.x * s) + (local.y * c));
-        radius = max(max(transform.radiiRotationFalloff.x, transform.radiiRotationFalloff.y) * (0.045 + Random01(h + 104729u) * 0.02), 0.0001);
-        float relief = transform.offsetScaleAmplitude.w * 0.06 + (Random01(h + 1299721u) - 0.5) * radius * 0.25;
+        radius = max(max(transform.radiiRotationFalloff.x, transform.radiiRotationFalloff.y) * (1.0 / 32.0) * tileScale * (0.12 + Random01(h + 104729u) * 0.04), 0.0004);
+        float relief = transform.offsetScaleAmplitude.w * 0.02 + (Random01(h + 1299721u) - 0.5) * radius * 0.5;
         float2 surfacePoint = transform.offsetScaleAmplitude.xy + rotated;
-        float3 dir = normalize(float3(surfacePoint.x, surfacePoint.y, 1.0 + relief));
+        float2 faceUv = CubeTileFaceUv(surfacePoint, transform.tileAddress);
+        float3 dir = CubeSphereDirection(transform.tileAddress.x, faceUv);
         return dir * (1.0 + relief + transform.materialSeedShape.x * 0.012);
     }
 
@@ -105,8 +147,8 @@ float3 FractalPoint(uint index, out float radius)
         {
             uint transformIndex = Hash(n + depth * 747796405u) % ProgramTransformCount;
             FractalIfsTransform transform = ProgramTransforms[transformIndex];
-            float c = transform.rotationDomain.x;
-            float s = transform.rotationDomain.y;
+            float c = transform.materialSeedShape.z;
+            float s = transform.materialSeedShape.w;
             float2 rotated = float2((p.x * c) - (p.y * s), (p.x * s) + (p.y * c));
             float childScale = saturate(transform.offsetScaleAmplitude.z);
             p = rotated * max(childScale, 0.01) + transform.offsetScaleAmplitude.xy;
