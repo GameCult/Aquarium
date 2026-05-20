@@ -17,6 +17,8 @@ public static class FractalDslCompiler
         var domains = new List<AquariumFractalDomain>();
         var claims = new List<AquariumBrushClaim>();
         var nodes = new List<NodeDraft>();
+        var affineIfsDrafts = new List<AffineIfsDraft>();
+        AffineIfsDraft? currentAffineIfs = null;
 
         for (var lineIndex = 0; lineIndex < lines.Length; lineIndex++)
         {
@@ -49,6 +51,33 @@ public static class FractalDslCompiler
                     rootKey = FractalStableKeyBuilder.Child(domainKey, "root");
                     currentNode = new NodeDraft(rootKey, domainKey, claims.Count);
                     nodes.Add(currentNode);
+                    currentAffineIfs = null;
+                    break;
+                case "affineifs":
+                    EnsureDomain(domain, lineIndex);
+                    EnsureNode(currentNode, lineIndex);
+                    EnsureTokenCount(tokens, 6, lineIndex);
+                    currentAffineIfs = new AffineIfsDraft(
+                        FractalStableKeyBuilder.Child(currentNode!.Key, $"affineifs/{tokens[1]}"),
+                        domain!.Value.Key,
+                        tokens[1],
+                        new Vector2(ParseFloat(tokens[2], lineIndex), ParseFloat(tokens[3], lineIndex)),
+                        ParseInt(tokens[4], lineIndex),
+                        tokens[5]);
+                    affineIfsDrafts.Add(currentAffineIfs);
+                    break;
+                case "affinemap":
+                    EnsureAffineIfs(currentAffineIfs, lineIndex);
+                    EnsureTokenCount(tokens, 9, lineIndex);
+                    currentAffineIfs!.Transforms.Add(new FractalAffineIfsTransform2D(
+                        tokens[1],
+                        new Vector4(
+                            ParseFloat(tokens[2], lineIndex),
+                            ParseFloat(tokens[3], lineIndex),
+                            ParseFloat(tokens[5], lineIndex),
+                            ParseFloat(tokens[6], lineIndex)),
+                        new Vector2(ParseFloat(tokens[4], lineIndex), ParseFloat(tokens[7], lineIndex)),
+                        ParsePositiveFloat(tokens[8], lineIndex)));
                     break;
                 case "height":
                     EnsureDomain(domain, lineIndex);
@@ -86,7 +115,7 @@ public static class FractalDslCompiler
             throw new FormatException("Fractal DSL must declare a `tile <face> <level> <x> <y> <path>` line before claims.");
         }
 
-        return new FractalOwnershipTree(domain.Value, domains, BuildNodes(nodes, claims), claims);
+        return new FractalOwnershipTree(domain.Value, domains, BuildNodes(nodes, claims), claims, BuildAffineIfsDefinitions(affineIfsDrafts));
     }
 
     private static AquariumFractalDomain ParseDomain(string[] tokens, int lineIndex)
@@ -343,6 +372,33 @@ public static class FractalDslCompiler
         }
     }
 
+    private static void EnsureAffineIfs(AffineIfsDraft? draft, int lineIndex)
+    {
+        if (draft is null)
+        {
+            throw new FormatException($"Affine IFS map at line {lineIndex + 1} appears before an affineifs declaration.");
+        }
+    }
+
+    private static FractalAffineIfsDefinition[] BuildAffineIfsDefinitions(IReadOnlyList<AffineIfsDraft> drafts)
+    {
+        var definitions = new FractalAffineIfsDefinition[drafts.Count];
+        for (var index = 0; index < drafts.Count; index++)
+        {
+            var draft = drafts[index];
+            definitions[index] = new FractalAffineIfsDefinition(
+                draft.Key,
+                draft.DomainKey,
+                draft.Name,
+                draft.Start,
+                draft.Seed,
+                draft.Tags,
+                draft.Transforms.ToArray());
+        }
+
+        return definitions;
+    }
+
     private static AquariumFractalNode[] BuildNodes(IReadOnlyList<NodeDraft> drafts, IReadOnlyList<AquariumBrushClaim> claims)
     {
         var nodes = new AquariumFractalNode[drafts.Count];
@@ -461,5 +517,28 @@ public static class FractalDslCompiler
         public int FirstClaimIndex { get; } = firstClaimIndex;
 
         public int ClaimCount { get; set; }
+    }
+
+    private sealed class AffineIfsDraft(
+        AquariumFractalKey key,
+        AquariumFractalKey domainKey,
+        string name,
+        Vector2 start,
+        int seed,
+        string tags)
+    {
+        public AquariumFractalKey Key { get; } = key;
+
+        public AquariumFractalKey DomainKey { get; } = domainKey;
+
+        public string Name { get; } = name;
+
+        public Vector2 Start { get; } = start;
+
+        public int Seed { get; } = seed;
+
+        public string Tags { get; } = tags;
+
+        public List<FractalAffineIfsTransform2D> Transforms { get; } = [];
     }
 }

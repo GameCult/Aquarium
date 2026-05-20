@@ -1,0 +1,6 @@
+# Candidate Aquarium DSL for the Apophysis/FLAM3 linear Sierpinski fixture.
+tile PositiveZ 0 0 0 reference/apophysis-linear-sierpinski
+affineifs linear-sierpinski 0 0 12345 apophysis-linear
+affinemap lower-left 0.5 0 0 0 0.5 0 1
+affinemap lower-right 0.5 0 0.5 0 0.5 0 1
+affinemap upper 0.5 0 0.25 0 0.5 0.4330127018922193 1

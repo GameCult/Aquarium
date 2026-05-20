@@ -8,7 +8,7 @@ public sealed class FractalOwnershipTree
         AquariumFractalDomain domain,
         IReadOnlyList<AquariumFractalNode> nodes,
         IReadOnlyList<AquariumBrushClaim> claims)
-        : this(domain, [domain], nodes, claims)
+        : this(domain, [domain], nodes, claims, [])
     {
     }
 
@@ -17,6 +17,16 @@ public sealed class FractalOwnershipTree
         IReadOnlyList<AquariumFractalDomain> domains,
         IReadOnlyList<AquariumFractalNode> nodes,
         IReadOnlyList<AquariumBrushClaim> claims)
+        : this(domain, domains, nodes, claims, [])
+    {
+    }
+
+    public FractalOwnershipTree(
+        AquariumFractalDomain domain,
+        IReadOnlyList<AquariumFractalDomain> domains,
+        IReadOnlyList<AquariumFractalNode> nodes,
+        IReadOnlyList<AquariumBrushClaim> claims,
+        IReadOnlyList<FractalAffineIfsDefinition> affineIfsDefinitions)
     {
         Domain = domain;
         DomainGraph = new FractalDomainGraph(domains);
@@ -24,6 +34,7 @@ public sealed class FractalOwnershipTree
         Domains = DomainGraph.Domains;
         Nodes = nodes;
         Claims = claims;
+        AffineIfsDefinitions = affineIfsDefinitions;
     }
 
     public AquariumFractalDomain Domain { get; }
@@ -35,4 +46,6 @@ public sealed class FractalOwnershipTree
     public IReadOnlyList<AquariumFractalNode> Nodes { get; }
 
     public IReadOnlyList<AquariumBrushClaim> Claims { get; }
+
+    public IReadOnlyList<FractalAffineIfsDefinition> AffineIfsDefinitions { get; }
 }
