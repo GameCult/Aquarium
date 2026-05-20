@@ -39,8 +39,10 @@ Console.WriteLine($"splats: {receipt.SplatCount:N0}");
 Console.WriteLine($"sdf reservoirs: {receipt.SdfReservoirCount:N0}");
 Console.WriteLine($"pbr reservoirs: {receipt.PbrReservoirCount:N0}");
 Console.WriteLine($"radiosity reservoirs: {receipt.RadiosityReservoirCount:N0}");
+Console.WriteLine($"flame states: {receipt.FlameStateCount:N0}");
 Console.WriteLine($"ifs program transforms: {receipt.ProgramTransformCount:N0}");
 Console.WriteLine($"program mode: {DescribeProgramMode(receipt.ProgramMode)}");
+Console.WriteLine($"warmup splat updates/frame: {receipt.WarmupSplatUpdatesPerFrame:N0}");
 Console.WriteLine($"splat updates/frame: {receipt.SplatUpdatesPerFrame:N0}");
 Console.WriteLine($"candidates/pass: {receipt.CandidatesPerPass}");
 Console.WriteLine($"reservoir updates/pass/frame: {receipt.ReservoirUpdatesPerPass:N0}");
@@ -49,6 +51,7 @@ Console.WriteLine($"frames: {receipt.MeasuredFrames}");
 Console.WriteLine("shader: D3D12 compute, independent GPU-resident SDF/PBR/radiosity reservoir passes");
 Console.WriteLine($"packed bytes/splat: {receipt.BytesPerSplat}");
 Console.WriteLine($"packed bytes/reservoir: {receipt.BytesPerReservoir}");
+Console.WriteLine($"packed bytes/flame state: {receipt.BytesPerFlameState}");
 Console.WriteLine($"gpu ms/frame total: {receipt.GpuMillisecondsPerFrame:0.000}");
 Console.WriteLine($"gpu equivalent fps: {receipt.GpuEquivalentFps:0.0}");
 Console.WriteLine($"gpu splats/sec: {receipt.GpuSplatsPerSecond:N0}");
@@ -227,6 +230,7 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
         var resolvedProgramMode = resolvedProgramTransforms.Length > 0 ? options.ProgramMode : 0;
         var splatStride = Marshal.SizeOf<AquariumPackedFractalSdfSplat3D>();
         var reservoirStride = Marshal.SizeOf<AquariumPackedSdfEnvelopeReservoir>();
+        var flameStateStride = Marshal.SizeOf<AquariumPackedFractalFlameState>();
         var framePlan = FractalGpuReservoirBudgetPlanner.Plan(
             options.SplatCount,
             options.ReservoirUpdatesPerPass,
@@ -235,10 +239,12 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
             reservoirStride);
         var splatBytes = checked((ulong)splatStride * (ulong)options.SplatCount);
         var reservoirBytes = checked((ulong)reservoirStride * (ulong)options.SplatCount);
+        var flameStateBytes = checked((ulong)flameStateStride * (ulong)options.SplatCount);
         using var splats = CreateUavBuffer(splatBytes, "Aquarium Fractal Receipt GPU Splat Buffer");
         using var sdfReservoirs = CreateUavBuffer(reservoirBytes, "Aquarium Fractal Receipt SDF Reservoir Buffer");
         using var pbrReservoirs = CreateUavBuffer(reservoirBytes, "Aquarium Fractal Receipt PBR Reservoir Buffer");
         using var radiosityReservoirs = CreateUavBuffer(reservoirBytes, "Aquarium Fractal Receipt Radiosity Reservoir Buffer");
+        using var flameStates = CreateUavBuffer(flameStateBytes, "Aquarium Fractal Receipt Flame Iteration State Buffer");
         using var programTransforms = CreateProgramTransformBuffer(resolvedProgramTransforms);
 
         var readbackSplatBytes = (ulong)Math.Min(options.ReadbackSplats, options.SplatCount) * (ulong)splatStride;
@@ -255,17 +261,20 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
 
         for (var frame = 0; frame < options.WarmupFrames + options.MeasuredFrames; frame++)
         {
+            var splatDispatchCount = frame == 0
+                ? options.SplatCount
+                : frame < options.WarmupFrames ? options.WarmupSplatUpdatesPerFrame : options.SplatUpdatesPerFrame;
             allocator.Reset();
             commandList.Reset(allocator, splatPipelineState);
             commandList.SetComputeRootSignature(rootSignature);
-            BindConstants(options, frame, resolvedProgramTransforms.Length, resolvedProgramMode);
+            BindConstants(options, frame, resolvedProgramTransforms.Length, resolvedProgramMode, splatDispatchCount);
             commandList.SetComputeRootUnorderedAccessView(1, splats.GPUVirtualAddress);
             commandList.SetComputeRootUnorderedAccessView(2, sdfReservoirs.GPUVirtualAddress);
             commandList.SetComputeRootUnorderedAccessView(3, pbrReservoirs.GPUVirtualAddress);
             commandList.SetComputeRootUnorderedAccessView(4, radiosityReservoirs.GPUVirtualAddress);
-            commandList.SetComputeRootShaderResourceView(5, programTransforms.GPUVirtualAddress);
+            commandList.SetComputeRootUnorderedAccessView(5, flameStates.GPUVirtualAddress);
+            commandList.SetComputeRootShaderResourceView(6, programTransforms.GPUVirtualAddress);
             commandList.EndQuery(queryHeap, QueryType.Timestamp, 0);
-            var splatDispatchCount = frame == 0 ? options.SplatCount : options.SplatUpdatesPerFrame;
             Dispatch(splatPipelineState, splatDispatchCount);
             commandList.ResourceBarrier(ResourceBarrier.BarrierUnorderedAccessView(splats));
             Dispatch(sdfPipelineState, options.ReservoirUpdatesPerPass);
@@ -312,8 +321,10 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
             options.SplatCount,
             options.SplatCount,
             options.SplatCount,
+            options.SplatCount,
             resolvedProgramTransforms.Length,
             resolvedProgramMode,
+            options.WarmupSplatUpdatesPerFrame,
             options.SplatUpdatesPerFrame,
             options.CandidatesPerPass,
             options.ReservoirUpdatesPerPass,
@@ -321,6 +332,7 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
             measuredFrames,
             splatStride,
             reservoirStride,
+            flameStateStride,
             gpuMsPerFrame,
             1000.0 / Math.Max(gpuMsPerFrame, 1.0e-12),
             splatsPerSecond,
@@ -427,7 +439,7 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
         return transforms;
     }
 
-    private void BindConstants(ReceiptOptions options, int frame, int programTransformCount, int programMode)
+    private void BindConstants(ReceiptOptions options, int frame, int programTransformCount, int programMode, int splatDispatchCount)
     {
         commandList.SetComputeRoot32BitConstant(0, (uint)options.SplatCount, 0);
         commandList.SetComputeRoot32BitConstant(0, (uint)frame, 1);
@@ -437,6 +449,7 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
         commandList.SetComputeRoot32BitConstant(0, (uint)options.ReservoirUpdatesPerPass, 5);
         commandList.SetComputeRoot32BitConstant(0, (uint)programTransformCount, 6);
         commandList.SetComputeRoot32BitConstant(0, (uint)programMode, 7);
+        commandList.SetComputeRoot32BitConstant(0, (uint)splatDispatchCount, 8);
     }
 
     private void CopyReceiptReadback(ID3D12Resource splats, ID3D12Resource sdf, ID3D12Resource pbr, ID3D12Resource radiosity, ID3D12Resource readback, ulong splatBytes, ulong reservoirBytes)
@@ -701,11 +714,12 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
     {
         var rootParameters = new[]
         {
-            new RootParameter(new RootConstants(0, 0, 8), ShaderVisibility.All),
+            new RootParameter(new RootConstants(0, 0, 9), ShaderVisibility.All),
             new RootParameter(RootParameterType.UnorderedAccessView, new RootDescriptor(0, 0), ShaderVisibility.All),
             new RootParameter(RootParameterType.UnorderedAccessView, new RootDescriptor(1, 0), ShaderVisibility.All),
             new RootParameter(RootParameterType.UnorderedAccessView, new RootDescriptor(2, 0), ShaderVisibility.All),
             new RootParameter(RootParameterType.UnorderedAccessView, new RootDescriptor(3, 0), ShaderVisibility.All),
+            new RootParameter(RootParameterType.UnorderedAccessView, new RootDescriptor(4, 0), ShaderVisibility.All),
             new RootParameter(RootParameterType.ShaderResourceView, new RootDescriptor(0, 0), ShaderVisibility.All),
         };
         var description = new RootSignatureDescription(RootSignatureFlags.None, rootParameters, []);
@@ -736,6 +750,7 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
 
 internal sealed record ReceiptOptions(
     int SplatCount,
+    int WarmupSplatUpdatesPerFrame,
     int SplatUpdatesPerFrame,
     int WarmupFrames,
     int MeasuredFrames,
@@ -765,6 +780,7 @@ internal sealed record ReceiptOptions(
     public static ReceiptOptions Parse(string[] args)
     {
         var options = new ReceiptOptions(
+            2_000_000,
             2_000_000,
             2_000_000,
             30,
@@ -798,6 +814,7 @@ internal sealed record ReceiptOptions(
             options = arg switch
             {
                 "--splats" => options with { SplatCount = int.Parse(Next()) },
+                "--warmup-splat-updates" => options with { WarmupSplatUpdatesPerFrame = int.Parse(Next()) },
                 "--splat-updates" => options with { SplatUpdatesPerFrame = int.Parse(Next()) },
                 "--warmup" => options with { WarmupFrames = int.Parse(Next()) },
                 "--frames" => options with { MeasuredFrames = int.Parse(Next()) },
@@ -872,7 +889,7 @@ internal sealed record ReceiptOptions(
             throw new ArgumentException("Visual parity requires --program-flame so the GPU distribution has a CPU flame oracle.");
         }
 
-        if (options.SplatCount <= 0 || options.SplatUpdatesPerFrame <= 0 || options.SplatUpdatesPerFrame > options.SplatCount || options.WarmupFrames < 0 || options.MeasuredFrames <= 0 || options.Depth <= 0 || options.CandidatesPerPass <= 0 || options.ReservoirUpdatesPerPass <= 0 || options.ReservoirUpdatesPerPass > options.SplatCount || options.ProgramTransformCount < 0 || options.ProgramMode < 0 || options.ProgramMode > 2 || options.ReadbackSplats < 0 || options.VisualParityReferenceSamples <= 0)
+        if (options.SplatCount <= 0 || options.WarmupSplatUpdatesPerFrame <= 0 || options.WarmupSplatUpdatesPerFrame > options.SplatCount || options.SplatUpdatesPerFrame <= 0 || options.SplatUpdatesPerFrame > options.SplatCount || options.WarmupFrames < 0 || options.MeasuredFrames <= 0 || options.Depth <= 0 || options.CandidatesPerPass <= 0 || options.ReservoirUpdatesPerPass <= 0 || options.ReservoirUpdatesPerPass > options.SplatCount || options.ProgramTransformCount < 0 || options.ProgramMode < 0 || options.ProgramMode > 2 || options.ReadbackSplats < 0 || options.VisualParityReferenceSamples <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(args), "Splats, splat updates, frames, depth, candidates, and reservoir updates must be positive; splat/reservoir updates must not exceed splats; program transforms, warmup, and readback must not be negative.");
         }
@@ -1014,8 +1031,10 @@ internal sealed record GpuFractalSplatReceipt(
     int SdfReservoirCount,
     int PbrReservoirCount,
     int RadiosityReservoirCount,
+    int FlameStateCount,
     int ProgramTransformCount,
     int ProgramMode,
+    int WarmupSplatUpdatesPerFrame,
     int SplatUpdatesPerFrame,
     int CandidatesPerPass,
     int ReservoirUpdatesPerPass,
@@ -1023,6 +1042,7 @@ internal sealed record GpuFractalSplatReceipt(
     int MeasuredFrames,
     int BytesPerSplat,
     int BytesPerReservoir,
+    int BytesPerFlameState,
     double GpuMillisecondsPerFrame,
     double GpuEquivalentFps,
     double GpuSplatsPerSecond,

@@ -252,6 +252,56 @@ Local GTX 1070 receipt from 2026-05-20:
 - equivalent FPS: `971.3`
 - readback checksum: `0x2647D8B08575B848`
 
+The flame hot path now keeps per-splat iteration state in a GPU UAV instead of
+replaying every chaos-game ancestry from the origin. `Depth` is the number of
+iterations advanced when a row is touched; the row stores point, support,
+material, random state, and accumulated step for the next stochastic update.
+
+This makes the receipt a two-phase cache:
+
+- acquisition: seed every resident row and optionally advance the full resident
+  population for a few warmup frames
+- maintenance: update only the budgeted stochastic subset while the layered
+  SDF/PBR/radiosity reservoirs continue their independent passes
+
+```powershell
+.\scripts\fractal-splat-receipt.ps1 `
+  -ProgramFlame artifacts\reference-tools\j-wildfire-9.00\lib\FARenderJWF\selftest.flame `
+  -Splats 2000000 `
+  -WarmupSplatUpdates 2000000 `
+  -SplatUpdates 50000 `
+  -Warmup 8 `
+  -Frames 20 `
+  -Depth 8 `
+  -ReservoirUpdates 15000 `
+  -ReadbackSplats 250000 `
+  -VisualParity `
+  -VisualParityReferenceSamples 1000000 `
+  -HistogramSize 256x256 `
+  -HistogramBounds -8,-8,8,8 `
+  -VisualParityImageDirectory artifacts\fractal-jwildfire-faceplant\source `
+  -VisualParityImagePrefix selftest-persistent-warmfull-depth008-frame-020
+```
+
+Local GTX 1070 receipt from 2026-05-21:
+
+- resident splats: `2,000,000`
+- flame iteration states: `2,000,000` at `32` bytes each
+- resident reservoir rows: `2,000,000` each for SDF, PBR, and radiosity
+- warmup splat updates/frame: `2,000,000`
+- steady splat updates/frame: `50,000`
+- reservoir updates/pass/frame: `15,000`
+- measured steady GPU time: `1.011 ms/frame`
+- equivalent steady FPS: `988.8`
+- visual parity against Aquarium CPU slice oracle: `84.86%`
+- cosine similarity: `0.986955`
+- readback checksum: `0xC633FADC3BD7E5BE`
+
+Without the full-population acquisition pass, the same steady budget scored only
+`32.64%` on the JWildfire selftest slice because most rows were still shallow
+ancestry. That is a useful failure: persistent state is not magic, it is a cache
+that must be filled before a tiny maintenance budget can look clever.
+
 ## Visual Parity Receipt
 
 The receipt tool can compare GPU flame splat positions against the local CPU

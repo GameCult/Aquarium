@@ -41,6 +41,12 @@ struct FractalIfsTransform
     float4 postTranslation;
 };
 
+struct FlameIterationState
+{
+    float4 pointSupportMaterial;
+    float4 randomStep;
+};
+
 cbuffer ReceiptConstants : register(b0)
 {
     uint SplatCount;
@@ -51,12 +57,14 @@ cbuffer ReceiptConstants : register(b0)
     uint ReservoirUpdatesPerPass;
     uint ProgramTransformCount;
     uint ProgramMode;
+    uint SplatDispatchCount;
 };
 
 RWStructuredBuffer<FractalSdfSplat> Splats : register(u0);
 RWStructuredBuffer<SdfEnvelopeReservoir> SdfReservoirs : register(u1);
 RWStructuredBuffer<PbrMaterialReservoir> PbrReservoirs : register(u2);
 RWStructuredBuffer<RadiosityReservoir> RadiosityReservoirs : register(u3);
+RWStructuredBuffer<FlameIterationState> FlameStates : register(u4);
 StructuredBuffer<FractalIfsTransform> ProgramTransforms : register(t0);
 
 uint Hash(uint x)
@@ -72,6 +80,21 @@ uint Hash(uint x)
 float Random01(uint value)
 {
     return (float)(Hash(value) & 16777215u) / 16777216.0;
+}
+
+uint XorShift(inout uint state)
+{
+    uint value = state == 0u ? 0xA341316Cu : state;
+    value ^= value << 13;
+    value ^= value >> 17;
+    value ^= value << 5;
+    state = value == 0u ? 0xA341316Cu : value;
+    return state;
+}
+
+float StateRandom01(inout uint state)
+{
+    return (float)(XorShift(state) & 16777215u) / 16777216.0;
 }
 
 float2 CubeTileFaceUv(float2 authoredPoint, float4 tileAddress)
@@ -118,10 +141,19 @@ float3 FractalPoint(uint index, out float radius)
 {
     if (ProgramTransformCount > 0u && ProgramMode == 2u)
     {
-        uint n = Hash(index ^ Seed);
-        float2 p = 0.0;
-        float material = 0.0;
-        float support = 1.0;
+        FlameIterationState state = FlameStates[index];
+        uint n = asuint(state.randomStep.x);
+        float step = state.randomStep.y;
+        if (FrameIndex == 0u || n == 0u)
+        {
+            n = Hash(index ^ Seed);
+            state.pointSupportMaterial = float4(0.0, 0.0, 1.0, 0.0);
+            step = 0.0;
+        }
+
+        float2 p = state.pointSupportMaterial.xy;
+        float support = max(state.pointSupportMaterial.z, 0.000001);
+        float material = state.pointSupportMaterial.w;
         float totalWeight = 0.0;
         [loop]
         for (uint weightIndex = 0u; weightIndex < ProgramTransformCount; weightIndex++)
@@ -132,7 +164,7 @@ float3 FractalPoint(uint index, out float radius)
         [loop]
         for (uint depth = 0; depth < Depth; depth++)
         {
-            float target = Random01(n + depth * 747796405u + FrameIndex * 1664525u) * max(totalWeight, 0.000001);
+            float target = StateRandom01(n) * max(totalWeight, 0.000001);
             float cumulative = 0.0;
             uint transformIndex = ProgramTransformCount - 1u;
             [loop]
@@ -168,7 +200,7 @@ float3 FractalPoint(uint index, out float radius)
             {
                 float power = abs(transform.tileAddress.z) < 1.0 ? 1.0 : transform.tileAddress.z;
                 float absPower = max(abs(power), 1.0);
-                float branch = floor(Random01(n + depth * 2246822519u + 97u) * absPower);
+                float branch = floor(StateRandom01(n) * absPower);
                 float angle = (theta + 6.28318530717958647692 * branch) / power;
                 float radial = pow(max(r, 0.000001), transform.materialSeedShape.w / power);
                 nextPoint += julian * radial * float2(cos(angle), sin(angle));
@@ -178,11 +210,11 @@ float3 FractalPoint(uint index, out float radius)
             if (blur != 0.0)
             {
                 float blurRadius = blur * (
-                    Random01(n + depth * 3266489917u + 11u) +
-                    Random01(n + depth * 3266489917u + 23u) +
-                    Random01(n + depth * 3266489917u + 37u) +
-                    Random01(n + depth * 3266489917u + 53u) - 2.0);
-                float blurAngle = Random01(n + depth * 668265263u + 71u) * 6.28318530717958647692;
+                    StateRandom01(n) +
+                    StateRandom01(n) +
+                    StateRandom01(n) +
+                    StateRandom01(n) - 2.0);
+                float blurAngle = StateRandom01(n) * 6.28318530717958647692;
                 nextPoint += blurRadius * float2(cos(blurAngle), sin(blurAngle));
             }
 
@@ -194,9 +226,12 @@ float3 FractalPoint(uint index, out float radius)
             p = nextPoint;
             material = transform.materialSeedShape.z;
             support *= saturate(max(length(m.xy), length(m.zw)));
-            n = Hash(n + asuint(transform.materialSeedShape.w) + transformIndex + depth);
         }
 
+        FlameIterationState nextState;
+        nextState.pointSupportMaterial = float4(p, support, material);
+        nextState.randomStep = float4(asfloat(n), step + (float)Depth, 0.0, 0.0);
+        FlameStates[index] = nextState;
         radius = max(0.0025 * max(support, 0.04), 0.00015);
         return float3(p, material * 0.08);
     }
@@ -301,13 +336,13 @@ float4 ReservoirStats(uint index, uint passKind, float baseTarget, out uint sele
 void D3D12FractalSplatReceiptCS(uint3 id : SV_DispatchThreadID)
 {
     uint updateIndex = id.x;
-    if (updateIndex >= SplatCount)
+    if (updateIndex >= SplatDispatchCount)
     {
         return;
     }
 
     uint index = updateIndex;
-    if (ProgramMode == 2u && FrameIndex > 0u)
+    if (FrameIndex > 0u && SplatDispatchCount < SplatCount)
     {
         index = ReservoirIndex(updateIndex, 4u);
     }

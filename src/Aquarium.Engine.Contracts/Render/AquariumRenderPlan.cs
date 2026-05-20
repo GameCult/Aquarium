@@ -455,6 +455,8 @@ public sealed class AquariumFractalReservoirField
 
     public int CandidatesPerReservoirUpdate { get; init; } = 2;
 
+    public int SplatUpdatesPerFrame { get; init; }
+
     public int ReservoirUpdatesPerPass { get; init; }
 
     public IReadOnlyList<AquariumPackedFractalIfsTransform> ProgramTransforms { get; init; } = [];
@@ -465,6 +467,8 @@ public sealed class AquariumFractalReservoirField
         SplatCount > 0 &&
         Depth > 0 &&
         CandidatesPerReservoirUpdate > 0 &&
+        SplatUpdatesPerFrame > 0 &&
+        SplatUpdatesPerFrame <= SplatCount &&
         ReservoirUpdatesPerPass > 0 &&
         ReservoirUpdatesPerPass <= SplatCount;
 }

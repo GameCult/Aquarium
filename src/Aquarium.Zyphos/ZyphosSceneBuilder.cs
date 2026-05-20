@@ -15,6 +15,7 @@ public static class ZyphosSceneBuilder
             FractalReservoirField = new AquariumFractalReservoirField
             {
                 SplatCount = 2_000_000,
+                SplatUpdatesPerFrame = 50_000,
                 ReservoirUpdatesPerPass = 20_000,
                 WorldCenterRadius = new Vector4(ZyphosUmbrosSystem.ZyphosCenter, ZyphosUmbrosSystem.ZyphosSurfaceRadius),
                 ProgramTransforms = fractalPlan.GpuProgramTransforms,

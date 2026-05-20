@@ -1,5 +1,6 @@
 param(
     [int]$Splats = 2000000,
+    [int]$WarmupSplatUpdates = 2000000,
     [int]$SplatUpdates = 2000000,
     [int]$Warmup = 30,
     [int]$Frames = 120,
@@ -45,6 +46,7 @@ if ($VisualParity) {
 
 dotnet run --project (Join-Path $repoRoot "tools\Aquarium.Fractal.Receipt\Aquarium.Fractal.Receipt.csproj") -c Release -- `
     --splats $Splats `
+    --warmup-splat-updates $WarmupSplatUpdates `
     --splat-updates $SplatUpdates `
     --warmup $Warmup `
     --frames $Frames `

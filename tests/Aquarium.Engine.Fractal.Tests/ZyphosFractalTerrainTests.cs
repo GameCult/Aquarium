@@ -87,6 +87,7 @@ public sealed class ZyphosFractalTerrainTests
 
         Assert.True(scene.FractalReservoirField.HasInput);
         Assert.Equal(2_000_000, scene.FractalReservoirField.SplatCount);
+        Assert.Equal(50_000, scene.FractalReservoirField.SplatUpdatesPerFrame);
         Assert.Equal(20_000, scene.FractalReservoirField.ReservoirUpdatesPerPass);
         Assert.Equal(2, scene.FractalReservoirField.CandidatesPerReservoirUpdate);
         Assert.Equal(ZyphosUmbrosSystem.ZyphosSurfaceRadius, scene.FractalReservoirField.WorldCenterRadius.W);

@@ -76,7 +76,8 @@ public sealed class D3D12Renderer : IAquariumRenderer
     private const int RootFractalSdfReservoirs = 2;
     private const int RootFractalPbrReservoirs = 3;
     private const int RootFractalRadiosityReservoirs = 4;
-    private const int RootFractalProgramTransforms = 5;
+    private const int RootFractalFlameStates = 5;
+    private const int RootFractalProgramTransforms = 6;
     private static readonly DebugUi.DebugUiOption[] RenderDebugOptions =
     [
         new(0, "Final"),
@@ -172,6 +173,7 @@ public sealed class D3D12Renderer : IAquariumRenderer
     private D3D12StructuredBuffer? fractalSdfReservoirBuffer;
     private D3D12StructuredBuffer? fractalPbrReservoirBuffer;
     private D3D12StructuredBuffer? fractalRadiosityReservoirBuffer;
+    private D3D12StructuredBuffer? fractalFlameStateBuffer;
     private D3D12StructuredBuffer? fractalProgramTransformBuffer;
     private readonly Dictionary<string, D3D12ExternalSensorTexture> externalSensorTextures = new(StringComparer.Ordinal);
     private readonly D3D12CubeTexture studioPmremTexture;
@@ -1338,7 +1340,7 @@ public sealed class D3D12Renderer : IAquariumRenderer
             return;
         }
 
-        if (fractalSplatBuffer is not null && fractalSplatBuffer.ElementCount >= field.SplatCount)
+        if (fractalSplatBuffer is not null && fractalFlameStateBuffer is not null && fractalSplatBuffer.ElementCount >= field.SplatCount && fractalFlameStateBuffer.ElementCount >= field.SplatCount)
         {
             return;
         }
@@ -1361,6 +1363,10 @@ public sealed class D3D12Renderer : IAquariumRenderer
             field.SplatCount,
             "fractal-radiosity-reservoir-buffer",
             "Aquarium D3D12 Fractal Radiosity Reservoir Buffer");
+        fractalFlameStateBuffer = CreateFractalReservoirBuffer<AquariumPackedFractalFlameState>(
+            field.SplatCount,
+            "fractal-flame-state-buffer",
+            "Aquarium D3D12 Fractal Flame Iteration State Buffer");
     }
 
     private D3D12StructuredBuffer CreateFractalReservoirBuffer<T>(int elementCount, string registryName, string resourceName)
@@ -1403,16 +1409,19 @@ public sealed class D3D12Renderer : IAquariumRenderer
     private void DisposeFractalReservoirBuffers()
     {
         resourceRegistry.RemoveStructuredBuffer("fractal-program-transform-buffer");
+        resourceRegistry.RemoveStructuredBuffer("fractal-flame-state-buffer");
         resourceRegistry.RemoveStructuredBuffer("fractal-radiosity-reservoir-buffer");
         resourceRegistry.RemoveStructuredBuffer("fractal-pbr-material-reservoir-buffer");
         resourceRegistry.RemoveStructuredBuffer("fractal-sdf-envelope-reservoir-buffer");
         resourceRegistry.RemoveStructuredBuffer("fractal-sdf-splat-buffer");
         fractalProgramTransformBuffer?.Dispose();
+        fractalFlameStateBuffer?.Dispose();
         fractalRadiosityReservoirBuffer?.Dispose();
         fractalPbrReservoirBuffer?.Dispose();
         fractalSdfReservoirBuffer?.Dispose();
         fractalSplatBuffer?.Dispose();
         fractalProgramTransformBuffer = null;
+        fractalFlameStateBuffer = null;
         fractalRadiosityReservoirBuffer = null;
         fractalPbrReservoirBuffer = null;
         fractalSdfReservoirBuffer = null;
@@ -1728,6 +1737,7 @@ public sealed class D3D12Renderer : IAquariumRenderer
             fractalSdfReservoirBuffer is null ||
             fractalPbrReservoirBuffer is null ||
             fractalRadiosityReservoirBuffer is null ||
+            fractalFlameStateBuffer is null ||
             fractalProgramTransformBuffer is null)
         {
             return;
@@ -1750,14 +1760,19 @@ public sealed class D3D12Renderer : IAquariumRenderer
             fractalSdfReservoirBuffer.Transition(activeCommandList, ResourceStates.UnorderedAccess);
             fractalPbrReservoirBuffer.Transition(activeCommandList, ResourceStates.UnorderedAccess);
             fractalRadiosityReservoirBuffer.Transition(activeCommandList, ResourceStates.UnorderedAccess);
+            fractalFlameStateBuffer.Transition(activeCommandList, ResourceStates.UnorderedAccess);
             activeCommandList.SetComputeRootSignature(fractalReservoirRootSignature);
-            BindFractalReservoirConstants(activeCommandList);
+            var splatDispatchCount = temporalFrameIndex == 0
+                ? activeFractalReservoirField.SplatCount
+                : activeFractalReservoirField.SplatUpdatesPerFrame;
+            BindFractalReservoirConstants(activeCommandList, splatDispatchCount);
             activeCommandList.SetComputeRootUnorderedAccessView(RootFractalSplats, fractalSplatBuffer.Resource.GPUVirtualAddress);
             activeCommandList.SetComputeRootUnorderedAccessView(RootFractalSdfReservoirs, fractalSdfReservoirBuffer.Resource.GPUVirtualAddress);
             activeCommandList.SetComputeRootUnorderedAccessView(RootFractalPbrReservoirs, fractalPbrReservoirBuffer.Resource.GPUVirtualAddress);
             activeCommandList.SetComputeRootUnorderedAccessView(RootFractalRadiosityReservoirs, fractalRadiosityReservoirBuffer.Resource.GPUVirtualAddress);
+            activeCommandList.SetComputeRootUnorderedAccessView(RootFractalFlameStates, fractalFlameStateBuffer.Resource.GPUVirtualAddress);
             activeCommandList.SetComputeRootShaderResourceView(RootFractalProgramTransforms, fractalProgramTransformBuffer.Resource.GPUVirtualAddress);
-            Dispatch(fractalSplatPipelineState!, activeFractalReservoirField.SplatCount);
+            Dispatch(fractalSplatPipelineState!, splatDispatchCount);
             activeCommandList.ResourceBarrier(ResourceBarrier.BarrierUnorderedAccessView(fractalSplatBuffer.Resource));
             Dispatch(fractalSdfReservoirPipelineState!, activeFractalReservoirField.ReservoirUpdatesPerPass);
             Dispatch(fractalPbrReservoirPipelineState!, activeFractalReservoirField.ReservoirUpdatesPerPass);
@@ -1775,7 +1790,7 @@ public sealed class D3D12Renderer : IAquariumRenderer
         }
     }
 
-    private void BindFractalReservoirConstants(ID3D12GraphicsCommandList activeCommandList)
+    private void BindFractalReservoirConstants(ID3D12GraphicsCommandList activeCommandList, int splatDispatchCount)
     {
         activeCommandList.SetComputeRoot32BitConstant(RootFractalConstants, (uint)activeFractalReservoirField.SplatCount, 0);
         activeCommandList.SetComputeRoot32BitConstant(RootFractalConstants, (uint)temporalFrameIndex, 1);
@@ -1785,6 +1800,7 @@ public sealed class D3D12Renderer : IAquariumRenderer
         activeCommandList.SetComputeRoot32BitConstant(RootFractalConstants, (uint)activeFractalReservoirField.ReservoirUpdatesPerPass, 5);
         activeCommandList.SetComputeRoot32BitConstant(RootFractalConstants, (uint)activeFractalProgramTransforms.Length, 6);
         activeCommandList.SetComputeRoot32BitConstant(RootFractalConstants, activeFractalProgramTransforms.Length > 0 ? 1u : 0u, 7);
+        activeCommandList.SetComputeRoot32BitConstant(RootFractalConstants, (uint)splatDispatchCount, 8);
     }
 
     private void CreateGpuSensorTextureViews(AquariumGpuSensorFrame sensorFrame, D3D12DescriptorSlot firstDescriptor)
@@ -2080,17 +2096,19 @@ public sealed class D3D12Renderer : IAquariumRenderer
             $"{frameResources.TransientShaderDescriptors.Describe()}; " +
             $"{staticShaderDescriptorArena.Describe()}; " +
             $"{renderTargetViewArena.Describe()}");
-        if (activeFractalReservoirField.HasInput && fractalSplatBuffer is not null && fractalSdfReservoirBuffer is not null && fractalPbrReservoirBuffer is not null && fractalRadiosityReservoirBuffer is not null)
+        if (activeFractalReservoirField.HasInput && fractalSplatBuffer is not null && fractalSdfReservoirBuffer is not null && fractalPbrReservoirBuffer is not null && fractalRadiosityReservoirBuffer is not null && fractalFlameStateBuffer is not null)
         {
             var residentBytes =
                 fractalSplatBuffer.SizeBytes +
                 fractalSdfReservoirBuffer.SizeBytes +
                 fractalPbrReservoirBuffer.SizeBytes +
-                fractalRadiosityReservoirBuffer.SizeBytes;
+                fractalRadiosityReservoirBuffer.SizeBytes +
+                fractalFlameStateBuffer.SizeBytes;
             Console.WriteLine(
                 $"D3D12 fractal reservoirs: splats {activeFractalReservoirField.SplatCount:N0}; " +
                 $"visible {visibleFractalSplatCount:N0}; " +
                 $"program transforms {activeFractalProgramTransforms.Length:N0}; " +
+                $"splat updates/frame {activeFractalReservoirField.SplatUpdatesPerFrame:N0}; " +
                 $"updates/pass {activeFractalReservoirField.ReservoirUpdatesPerPass:N0}; " +
                 $"candidates/update {activeFractalReservoirField.CandidatesPerReservoirUpdate}; " +
                 $"resident {residentBytes / (1024.0 * 1024.0):0.0} MiB");
@@ -2611,11 +2629,12 @@ public sealed class D3D12Renderer : IAquariumRenderer
     {
         var rootParameters = new[]
         {
-            new RootParameter(new RootConstants(0, 0, 8), ShaderVisibility.All),
+            new RootParameter(new RootConstants(0, 0, 9), ShaderVisibility.All),
             new RootParameter(RootParameterType.UnorderedAccessView, new RootDescriptor(0, 0), ShaderVisibility.All),
             new RootParameter(RootParameterType.UnorderedAccessView, new RootDescriptor(1, 0), ShaderVisibility.All),
             new RootParameter(RootParameterType.UnorderedAccessView, new RootDescriptor(2, 0), ShaderVisibility.All),
             new RootParameter(RootParameterType.UnorderedAccessView, new RootDescriptor(3, 0), ShaderVisibility.All),
+            new RootParameter(RootParameterType.UnorderedAccessView, new RootDescriptor(4, 0), ShaderVisibility.All),
             new RootParameter(RootParameterType.ShaderResourceView, new RootDescriptor(0, 0), ShaderVisibility.All),
         };
         var description = new RootSignatureDescription(
