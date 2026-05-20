@@ -88,6 +88,47 @@ This is the first external renderer receipt. It proves the fixture can be
 rendered by the reference family and gives Aquarium a stable image artifact to
 compare as the local flame subset grows.
 
+## JWildfire / FARender Visual Reference
+
+Aquarium now has a reproducible higher-quality visual reference lane that does
+not depend on tools already installed on the workstation:
+
+```powershell
+.\scripts\install-flame-reference-tools.ps1
+.\scripts\fractal-flame-jwildfire-reference.ps1 `
+  -Renderer FARender `
+  -Width 1024 `
+  -Height 1024 `
+  -Quality 2000 `
+  -NoDensityEstimation
+```
+
+`install-flame-reference-tools.ps1` downloads JWildfire 9.00 and a local
+Temurin JRE into ignored `artifacts/reference-tools`. These are reference
+artifacts, not Aquarium runtime dependencies.
+
+`fractal-flame-jwildfire-reference.ps1` prefers JWildfire's bundled FARender
+GPU path when available because it accepts an explicit output file and fails
+the script when no image is produced. The Java batch renderer remains available
+through `-Renderer JWildfireJava`, but local smoke showed that it can complete
+without writing an image into the batch directory because JWildfire's output
+folder is preference-driven. Silent reference success is not a reference.
+
+Local GTX 1070 smoke receipt from 2026-05-20:
+
+- renderer: JWildfire 9.00 bundled FARenderJWF
+- fixture: `artifacts/reference-tools/j-wildfire-9.00/lib/FARenderJWF/selftest.flame`
+- command: `1024x1024`, quality `2000`, CUDA, no density-estimation phase
+- time: `7.69 sec`
+- artifact:
+  `artifacts/fractal-flame-jwildfire-reference/selftest-farender-20260520-233638.png`
+
+The repository's tiny `linear-spherical-bubble.flame` fixture is still useful
+for Aquarium subset parity, but FARender crashed on it because the fixture is
+Apophysis-style minimal XML rather than full JWildfire `variationGroup` flame
+XML. Do not "fix" that by making the fixture bigger until the parser and DSL
+contract deliberately support the richer reference dialect.
+
 ## GPU Flame Receipt
 
 The flame fixture can now drive the D3D12 reservoir receipt directly:
@@ -191,8 +232,79 @@ but it is not yet view-adaptive. It needs camera-conditioned target weights,
 underrepresented-bin feedback, and temporal reuse validation before it deserves
 claims about maintaining flame quality during movement and zoom.
 
+## Contact Sheets
+
+The quick 1M-sample oracle image is too noisy for visual judgment. Use the image
+export path with a much larger CPU oracle when making contact sheets:
+
+```powershell
+.\scripts\fractal-splat-receipt.ps1 `
+  -ProgramFlame tests\Aquarium.Engine.Fractal.Tests\Fixtures\Apophysis\linear-spherical-bubble.flame `
+  -VisualParity `
+  -VisualParityReferenceSamples 20000000 `
+  -VisualParityImageDirectory artifacts\fractal-contact-sheet-hq\source `
+  -VisualParityImagePrefix zoom-frame-010 `
+  -ReadbackSplats 250000 `
+  -Depth 16 `
+  -Frames 10 `
+  -VisualParityView zoom:-0.25,-0.25,0.25,0.25
+```
+
+The current high-reference contact sheet lives at:
+
+- `artifacts/fractal-contact-sheet-hq/flame-parity-contact-sheet-hq.png`
+
+It uses 20M CPU oracle samples and 250k Aquarium readback samples per panel.
+This still is not a full FLAM3 density-estimated render, but it is no longer a
+1M-sample noise patch masquerading as ground truth.
+
 ## Sources
 
 - Apophysis 7x repository: https://github.com/wanily/apophysis7x
 - FLAM3 repository and variation list: https://github.com/scottdraves/flam3
 - Draves, *The Fractal Flame Algorithm*: https://flam3.com/flame_draves.pdf
+
+## Reference Ladder
+
+Stop calling Aquarium's CPU histogram the visual ground truth. It is a math
+oracle for a tiny variation subset. It is useful because it is deterministic,
+small, and debuggable. It is not the bar for beautiful flame rendering.
+
+Use this ladder:
+
+1. **Gold visual reference: Chaotica.** Chaotica is the quality target for
+   flame art. Its own manual frames progressive rendering as the alternative
+   to Apophysis/FLAM3 fixed-quality rerendering, and says high quality often
+   means stopping at a sampling level after the image is no longer noisy. Use
+   Chaotica renders as imported reference artifacts when available.
+2. **Scriptable visual reference: JWildfire/FARender.** JWildfire is LGPL,
+   has a documented headless batch renderer path:
+   `java org.jwildfire.create.tina.batch.HeadlessBatchRendererController <dir> <w> <h> <quality>`.
+   Its current public bundle also ships FARenderJWF, a Windows/NVIDIA GPU
+   renderer that the JWildfire changelog says may still be used while it works.
+   Use `scripts/install-flame-reference-tools.ps1` to hydrate the local tools
+   and `scripts/fractal-flame-jwildfire-reference.ps1 -Renderer FARender` for
+   explicit PNG output.
+3. **Baseline renderer reference: FLAM3/Apophysis family.** Use FLAM3 for
+   portable `.flame`/`.flam3` compatibility, deterministic external receipts,
+   and old-school density-estimation sanity.
+4. **Aquarium CPU oracle.** Use only for unit tests, point parity, histogram
+   smoke checks, and shader debugging. Never present it as market-quality
+   visual ground truth.
+
+Local machine status on 2026-05-20: Chaotica and `flam3-render` were not found
+on PATH; only Ultra Fractal 6 was visible under Program Files. JWildfire 9.00
+and Temurin JRE 17 were downloaded into ignored artifacts, and FARenderJWF
+successfully rendered its bundled selftest flame on the GTX 1070. Aquarium can
+now compare against a real external flame renderer artifact, but it still
+cannot claim best-in-market visual parity until imported Chaotica renders or a
+fully matched JWildfire flame dialect are wired into residual metrics.
+
+Additional sources:
+
+- Chaotica features: https://chaoticafractals.com/features
+- Chaotica progressive rendering: https://www.chaoticafractals.com/manual/rendering/progressive_rendering
+- Chaotica render settings / sampling level: https://www.chaoticafractals.com/manual/user_interface/render_settings
+- JWildfire GitHub / LGPL license: https://github.com/thargor6/JWildfire
+- JWildfire headless batch renderer notes: https://www.jwfsanctuary.club/tutorial/how-to/how-do-i-render-a-full-folder-of-flames/
+- JWildfire bundled FARender/Swan notes: `artifacts/reference-tools/j-wildfire-9.00/CHANGES.txt`
