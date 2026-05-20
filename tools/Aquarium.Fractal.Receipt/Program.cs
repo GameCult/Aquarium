@@ -25,6 +25,7 @@ Console.WriteLine($"sdf reservoirs: {receipt.SdfReservoirCount:N0}");
 Console.WriteLine($"pbr reservoirs: {receipt.PbrReservoirCount:N0}");
 Console.WriteLine($"radiosity reservoirs: {receipt.RadiosityReservoirCount:N0}");
 Console.WriteLine($"ifs program transforms: {receipt.ProgramTransformCount:N0}");
+Console.WriteLine($"program mode: {(receipt.ProgramTransformCount > 0 ? "precomposed selected cut" : "fallback hash IFS")}");
 Console.WriteLine($"candidates/pass: {receipt.CandidatesPerPass}");
 Console.WriteLine($"reservoir updates/pass/frame: {receipt.ReservoirUpdatesPerPass:N0}");
 Console.WriteLine($"reservoir full-coverage frames: {receipt.ReservoirFullCoverageFrames:0.0}");
@@ -270,7 +271,7 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
         commandList.SetComputeRoot32BitConstant(0, (uint)options.CandidatesPerPass, 4);
         commandList.SetComputeRoot32BitConstant(0, (uint)options.ReservoirUpdatesPerPass, 5);
         commandList.SetComputeRoot32BitConstant(0, (uint)options.ProgramTransformCount, 6);
-        commandList.SetComputeRoot32BitConstant(0, 0u, 7);
+        commandList.SetComputeRoot32BitConstant(0, options.ProgramTransformCount > 0 ? 1u : 0u, 7);
     }
 
     private void CopyReceiptReadback(ID3D12Resource splats, ID3D12Resource sdf, ID3D12Resource pbr, ID3D12Resource radiosity, ID3D12Resource readback, ulong splatBytes, ulong reservoirBytes)

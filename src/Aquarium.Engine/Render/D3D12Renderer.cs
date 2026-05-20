@@ -1783,7 +1783,7 @@ public sealed class D3D12Renderer : IAquariumRenderer
         activeCommandList.SetComputeRoot32BitConstant(RootFractalConstants, (uint)activeFractalReservoirField.CandidatesPerReservoirUpdate, 4);
         activeCommandList.SetComputeRoot32BitConstant(RootFractalConstants, (uint)activeFractalReservoirField.ReservoirUpdatesPerPass, 5);
         activeCommandList.SetComputeRoot32BitConstant(RootFractalConstants, (uint)activeFractalProgramTransforms.Length, 6);
-        activeCommandList.SetComputeRoot32BitConstant(RootFractalConstants, 0u, 7);
+        activeCommandList.SetComputeRoot32BitConstant(RootFractalConstants, activeFractalProgramTransforms.Length > 0 ? 1u : 0u, 7);
     }
 
     private void CreateGpuSensorTextureViews(AquariumGpuSensorFrame sensorFrame, D3D12DescriptorSlot firstDescriptor)

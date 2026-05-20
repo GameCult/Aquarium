@@ -74,6 +74,22 @@ float Random01(uint value)
 
 float3 FractalPoint(uint index, out float radius)
 {
+    if (ProgramTransformCount > 0u && ProgramMode == 1u)
+    {
+        uint h = Hash(index ^ Seed);
+        uint transformIndex = h % ProgramTransformCount;
+        FractalIfsTransform transform = ProgramTransforms[transformIndex];
+        float rx = Random01(h + FrameIndex * 17u) * 2.0 - 1.0;
+        float ry = Random01(h + 7919u) * 2.0 - 1.0;
+        float c = transform.rotationDomain.x;
+        float s = transform.rotationDomain.y;
+        float2 local = float2(rx * transform.radiiRotationFalloff.x, ry * transform.radiiRotationFalloff.y) * 0.65;
+        float2 rotated = float2((local.x * c) - (local.y * s), (local.x * s) + (local.y * c));
+        radius = max(max(transform.radiiRotationFalloff.x, transform.radiiRotationFalloff.y) * (0.34 + Random01(h + 104729u) * 0.16), 0.0001);
+        float z = transform.offsetScaleAmplitude.w + (Random01(h + 1299721u) - 0.5) * radius * 0.2;
+        return float3(transform.offsetScaleAmplitude.xy + rotated, z + transform.materialSeedShape.x * 0.05);
+    }
+
     if (ProgramTransformCount > 0u)
     {
         uint n = index ^ Seed;
