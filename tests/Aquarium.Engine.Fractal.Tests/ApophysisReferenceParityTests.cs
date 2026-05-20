@@ -56,6 +56,56 @@ public sealed class ApophysisReferenceParityTests
         Assert.InRange(mean.Y, 0.27f, 0.33f);
     }
 
+    [Fact]
+    public void FlameParserReadsApophysisVariationSubset()
+    {
+        var root = FindRepoRoot();
+        var flamePath = Path.Combine(root, "tests", "Aquarium.Engine.Fractal.Tests", "Fixtures", "Apophysis", "linear-spherical-bubble.flame");
+
+        var flame = FractalFlameFileParser.ParseFirst(File.ReadAllText(flamePath), seed: 77);
+
+        Assert.Equal("linear-spherical-bubble", flame.Name);
+        Assert.Equal(77, flame.Seed);
+        Assert.Equal(3, flame.Transforms.Count);
+        Assert.Equal(1.0f, flame.Transforms[0].Variations.Linear);
+        Assert.Equal(0.72f, flame.Transforms[1].Variations.Spherical);
+        Assert.Equal(0.84f, flame.Transforms[2].Variations.Bubble);
+        Assert.Equal(new Vector2(-0.20f, 0.08f), flame.Transforms[0].Translation);
+    }
+
+    [Fact]
+    public void FlameVariationEvaluatorMatchesIndependentReference()
+    {
+        var root = FindRepoRoot();
+        var flamePath = Path.Combine(root, "tests", "Aquarium.Engine.Fractal.Tests", "Fixtures", "Apophysis", "linear-spherical-bubble.flame");
+
+        var flame = FractalFlameFileParser.ParseFirst(File.ReadAllText(flamePath), seed: 77);
+        var point = new Vector2(0.37f, -0.21f);
+        foreach (var transform in flame.Transforms)
+        {
+            var expected = ApplyReferenceVariation(transform, point);
+            var actual = transform.Apply(point);
+            AssertClose(expected, actual);
+        }
+    }
+
+    [Fact]
+    public void FlameHistogramIsDeterministicForReferenceFixture()
+    {
+        var root = FindRepoRoot();
+        var flamePath = Path.Combine(root, "tests", "Aquarium.Engine.Fractal.Tests", "Fixtures", "Apophysis", "linear-spherical-bubble.flame");
+        var flame = FractalFlameFileParser.ParseFirst(File.ReadAllText(flamePath), seed: 77);
+
+        var points = FractalFlameChaosGame.Generate(flame, count: 8192, burnIn: 64, new FractalXorShiftRandom(0xBADC_0DEu));
+        var histogram = FractalPointHistogramBuilder.Build(points, 64, 64, new Vector4(-8.0f, -8.0f, 8.0f, 8.0f));
+        var occupied = histogram.Bins.Count(value => value > 0);
+        var checksum = histogram.Bins.Aggregate(2166136261u, (hash, value) => unchecked((hash ^ (uint)value) * 16777619u));
+
+        Assert.Equal(8192, histogram.HitCount);
+        Assert.InRange(occupied, 450, 540);
+        Assert.Equal(0xAEB1C81Bu, checksum);
+    }
+
     private static IReadOnlyList<ReferenceAffineTransform> LoadLinearApophysisFixture(string path)
     {
         var document = XDocument.Load(path);
@@ -78,6 +128,26 @@ public sealed class ApophysisReferenceParityTests
     private static void AssertClose(Vector2 expected, Vector2 actual)
     {
         Assert.True(Vector2.Distance(expected, actual) <= 0.000001f, $"Expected {expected}, got {actual}.");
+    }
+
+    private static Vector2 ApplyReferenceVariation(FractalFlameTransform2D transform, Vector2 point)
+    {
+        var affine = new Vector2(
+            (transform.Matrix.X * point.X) + (transform.Matrix.Y * point.Y) + transform.Translation.X,
+            (transform.Matrix.Z * point.X) + (transform.Matrix.W * point.Y) + transform.Translation.Y);
+        var radiusSquared = Vector2.Dot(affine, affine);
+        var result = affine * transform.Variations.Linear;
+        if (transform.Variations.Spherical != 0.0f)
+        {
+            result += affine * (transform.Variations.Spherical / MathF.Max(radiusSquared, 0.000001f));
+        }
+
+        if (transform.Variations.Bubble != 0.0f)
+        {
+            result += affine * (transform.Variations.Bubble * 4.0f / (radiusSquared + 4.0f));
+        }
+
+        return result;
     }
 
     private static string FindRepoRoot()

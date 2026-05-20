@@ -1,0 +1,7 @@
+<flames>
+  <flame name="linear-spherical-bubble" version="Apophysis 7X reference fixture" size="512 512" center="0 0" scale="180" rotate="0" background="0 0 0" brightness="1" gamma="2.2">
+    <xform weight="0.45" color="0.2" linear="1" coefs="0.42 0.10 -0.20 -0.12 0.44 0.08" />
+    <xform weight="0.35" color="0.6" spherical="0.72" linear="0.18" coefs="0.31 -0.22 0.18 0.24 0.36 -0.10" />
+    <xform weight="0.20" color="1" bubble="0.84" linear="0.16" coefs="0.22 0.18 0.05 -0.28 0.24 0.16" />
+  </flame>
+</flames>

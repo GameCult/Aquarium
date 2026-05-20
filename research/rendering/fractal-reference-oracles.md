@@ -35,9 +35,11 @@ This is not full flame parity. It is the first ruler on the desk.
 
 ## Next Gates
 
-1. Parse a minimal `.flame` subset into a renderer-agnostic flame definition:
-   xform weight, color, affine coefficients, and variation weights.
-2. Add exact point parity for `linear`, then `spherical`, then `bubble`.
+1. DONE: parse a minimal `.flame` subset into a renderer-agnostic flame
+   definition: xform weight, color, affine coefficients, and `linear`,
+   `spherical`, and `bubble` variation weights.
+2. DONE: add exact point parity for `linear`, `spherical`, and `bubble`,
+   plus a deterministic histogram checksum for the mixed fixture.
 3. Add deterministic histogram parity against a local external FLAM3/Apophysis
    compatible renderer, with generated receipts under `artifacts/parity`.
 4. Lower proven flame definitions into GPU program rows. Only then should the
