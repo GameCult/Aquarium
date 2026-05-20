@@ -186,6 +186,21 @@ translation report, lower supported variation nodes into compact GPU op rows,
 and carry persistent per-sample iteration state so zoom/movement can reuse
 sample history instead of starting every splat from zero.
 
+That import report now exists. GPU and histogram flame receipts emit a sibling
+`fractal-flame-import-report-*.json` next to the numeric receipt. For the
+JWildfire selftest flame, the first report says:
+
+- accepted fields: `14`
+- approximated fields: `3`
+- ignored fields: `45`
+- rejected fields: `12`
+- rejected geometry/sampling losses: non-identity `post` on the julian xform
+  and `wfield_*` weighting-field attributes on the disc xform
+
+This report is the next expansion gate. A flame may parse successfully and
+still be a bad import; unsupported fields must stay visible until the DSL,
+compiler, or renderer can actually own them.
+
 ## GPU Flame Receipt
 
 The flame fixture can now drive the D3D12 reservoir receipt directly:

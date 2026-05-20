@@ -113,10 +113,13 @@ public sealed class ApophysisReferenceParityTests
         var root = FindRepoRoot();
         var flamePath = Path.Combine(root, "tests", "Aquarium.Engine.Fractal.Tests", "Fixtures", "JWildfire", "julian-disc-minimal.flame");
 
-        var flame = FractalFlameFileParser.ParseFirst(File.ReadAllText(flamePath), seed: 91);
+        var result = FractalFlameFileParser.ParseFirstWithReport(File.ReadAllText(flamePath), seed: 91);
+        var flame = result.Definition;
 
         Assert.Equal("julian-disc-minimal", flame.Name);
         Assert.Equal(2, flame.Transforms.Count);
+        Assert.Equal("JWildfire", result.Report.Dialect);
+        Assert.Equal(2, result.Report.TransformCount);
         Assert.Equal(new Vector4(1.0f, 0.0f, 0.0f, 1.0f), flame.Transforms[0].Matrix);
         Assert.Equal(new Vector2(-0.1f, 0.2f), flame.Transforms[0].Translation);
         Assert.Equal(1.0f, flame.Transforms[0].Variations.Linear);
@@ -126,6 +129,9 @@ public sealed class ApophysisReferenceParityTests
         Assert.Equal(0.02f, flame.Transforms[0].Variations.GaussianBlur);
         Assert.Equal(new Vector4(0.25f, 0.75f, -0.75f, 0.25f), flame.Transforms[1].Matrix);
         Assert.Equal(0.8f, flame.Transforms[1].Variations.Disc);
+        Assert.Contains("variation:normal -> linear", result.Report.Transforms[0].ApproximatedFields);
+        Assert.Contains("variation:jwf_gaussian_blur -> stochastic gaussian_blur", result.Report.Transforms[0].ApproximatedFields);
+        Assert.Contains("post", result.Report.Transforms[0].RejectedFields);
     }
 
     [Fact]
@@ -142,6 +148,25 @@ public sealed class ApophysisReferenceParityTests
         Assert.Equal(5.0f, rows[0].TileAddress.Z);
         Assert.Equal(0.02f, rows[0].TileAddress.W);
         Assert.Equal(0.8f, rows[1].TileAddress.X);
+    }
+
+    [Fact]
+    public void JWildfireImportReportNamesUnsupportedLosses()
+    {
+        var root = FindRepoRoot();
+        var flamePath = Path.Combine(root, "artifacts", "reference-tools", "j-wildfire-9.00", "lib", "FARenderJWF", "selftest.flame");
+        if (!File.Exists(flamePath))
+        {
+            return;
+        }
+
+        var result = FractalFlameFileParser.ParseFirstWithReport(File.ReadAllText(flamePath), seed: 91);
+
+        Assert.True(result.Report.AcceptedFieldCount > 0);
+        Assert.True(result.Report.ApproximatedFieldCount > 0);
+        Assert.True(result.Report.RejectedFieldCount > 0);
+        Assert.Contains(result.Report.Transforms, transform => transform.RejectedFields.Contains("post"));
+        Assert.Contains(result.Report.Transforms, transform => transform.RejectedFields.Any(field => field.StartsWith("wfield_", StringComparison.Ordinal)));
     }
 
     [Fact]

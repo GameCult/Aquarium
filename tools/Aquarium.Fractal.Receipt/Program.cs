@@ -28,8 +28,10 @@ using var runner = new GpuFractalSplatReceiptRunner(shaderSource);
 var receipt = runner.Run(options);
 
 Directory.CreateDirectory(options.OutputDirectory);
-var receiptPath = Path.Combine(options.OutputDirectory, $"fractal-gpu-splat-receipt-{DateTimeOffset.Now:yyyyMMdd-HHmmss}.json");
+var receiptStamp = DateTimeOffset.Now.ToString("yyyyMMdd-HHmmss");
+var receiptPath = Path.Combine(options.OutputDirectory, $"fractal-gpu-splat-receipt-{receiptStamp}.json");
 File.WriteAllText(receiptPath, JsonSerializer.Serialize(receipt, new JsonSerializerOptions { WriteIndented = true }));
+var importReportPath = WriteProgramFlameImportReport(options, receiptStamp);
 
 Console.WriteLine("=== Aquarium Perfect Machine GPU Splat Receipt ===");
 Console.WriteLine($"adapter: {receipt.Adapter}");
@@ -53,6 +55,12 @@ Console.WriteLine($"gpu splats/sec: {receipt.GpuSplatsPerSecond:N0}");
 Console.WriteLine($"gpu reservoir candidates/sec: {receipt.GpuReservoirCandidatesPerSecond:N0}");
 Console.WriteLine($"cpu submit+wait ms/frame: {receipt.CpuSubmitAndWaitMillisecondsPerFrame:0.000}");
 Console.WriteLine($"readback checksum: 0x{receipt.ReadbackChecksum:X16}");
+if (importReportPath is not null)
+{
+    var report = FractalFlameFileParser.ParseFirstWithReport(File.ReadAllText(options.ProgramFlamePath!), unchecked((int)options.Seed)).Report;
+    Console.WriteLine($"flame import: accepted {report.AcceptedFieldCount:N0}, approximated {report.ApproximatedFieldCount:N0}, ignored {report.IgnoredFieldCount:N0}, rejected {report.RejectedFieldCount:N0}");
+    Console.WriteLine($"flame import report: {importReportPath}");
+}
 if (receipt.VisualParity is not null)
 {
     Console.WriteLine($"visual parity samples: {receipt.VisualParity.ComparedSamples:N0}/{receipt.VisualParity.ReferenceSamples:N0}");
@@ -111,7 +119,8 @@ static void RunReferencePpmReceipt(ReceiptOptions options)
 static void RunFlameHistogramReceipt(ReceiptOptions options)
 {
     var flameSource = File.ReadAllText(options.FlamePath!);
-    var flame = FractalFlameFileParser.ParseFirst(flameSource, unchecked((int)options.Seed));
+    var parsed = FractalFlameFileParser.ParseFirstWithReport(flameSource, unchecked((int)options.Seed));
+    var flame = parsed.Definition;
     var points = FractalFlameChaosGame.Generate(
         flame,
         options.HistogramSamples,
@@ -143,8 +152,11 @@ static void RunFlameHistogramReceipt(ReceiptOptions options)
         checksum);
 
     Directory.CreateDirectory(options.OutputDirectory);
-    var receiptPath = Path.Combine(options.OutputDirectory, $"fractal-flame-histogram-receipt-{DateTimeOffset.Now:yyyyMMdd-HHmmss}.json");
+    var stamp = DateTimeOffset.Now.ToString("yyyyMMdd-HHmmss");
+    var receiptPath = Path.Combine(options.OutputDirectory, $"fractal-flame-histogram-receipt-{stamp}.json");
     File.WriteAllText(receiptPath, JsonSerializer.Serialize(receipt, new JsonSerializerOptions { WriteIndented = true }));
+    var importReportPath = Path.Combine(options.OutputDirectory, $"fractal-flame-import-report-{stamp}.json");
+    File.WriteAllText(importReportPath, JsonSerializer.Serialize(new FlameImportReportReceipt(Path.GetFullPath(options.FlamePath!), parsed.Report), new JsonSerializerOptions { WriteIndented = true }));
 
     Console.WriteLine("=== Aquarium Fractal Flame Histogram Receipt ===");
     Console.WriteLine($"flame: {receipt.FlameName}");
@@ -156,7 +168,22 @@ static void RunFlameHistogramReceipt(ReceiptOptions options)
     Console.WriteLine($"hits: {receipt.HitCount:N0}");
     Console.WriteLine($"occupied bins: {receipt.OccupiedBins:N0}");
     Console.WriteLine($"histogram checksum: 0x{receipt.Checksum:X8}");
+    Console.WriteLine($"flame import: accepted {parsed.Report.AcceptedFieldCount:N0}, approximated {parsed.Report.ApproximatedFieldCount:N0}, ignored {parsed.Report.IgnoredFieldCount:N0}, rejected {parsed.Report.RejectedFieldCount:N0}");
+    Console.WriteLine($"flame import report: {importReportPath}");
     Console.WriteLine($"receipt: {receiptPath}");
+}
+
+static string? WriteProgramFlameImportReport(ReceiptOptions options, string receiptStamp)
+{
+    if (options.ProgramFlamePath is null)
+    {
+        return null;
+    }
+
+    var parsed = FractalFlameFileParser.ParseFirstWithReport(File.ReadAllText(options.ProgramFlamePath), unchecked((int)options.Seed));
+    var reportPath = Path.Combine(options.OutputDirectory, $"fractal-flame-import-report-{receiptStamp}.json");
+    File.WriteAllText(reportPath, JsonSerializer.Serialize(new FlameImportReportReceipt(Path.GetFullPath(options.ProgramFlamePath), parsed.Report), new JsonSerializerOptions { WriteIndented = true }));
+    return reportPath;
 }
 
 internal sealed class GpuFractalSplatReceiptRunner : IDisposable
@@ -924,6 +951,10 @@ internal sealed record ReferencePpmReceipt(
     int NonBlackPixelCount,
     ulong RgbChecksum,
     ulong LuminanceChecksum);
+
+internal sealed record FlameImportReportReceipt(
+    string SourcePath,
+    FractalFlameImportReport Report);
 
 internal readonly record struct VisualParityView(string Name, Vector4 Bounds);
 
