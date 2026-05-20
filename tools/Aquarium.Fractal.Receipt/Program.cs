@@ -3,6 +3,7 @@ using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using Aquarium.Engine.Fractal;
+using Aquarium.Engine.Fractal.Grammar;
 using Aquarium.Engine.Fractal.Lod;
 using Vortice.D3DCompiler;
 using Vortice.Direct3D;
@@ -10,6 +11,12 @@ using Vortice.Direct3D12;
 using Vortice.DXGI;
 
 var options = ReceiptOptions.Parse(args);
+if (options.FlamePath is not null)
+{
+    RunFlameHistogramReceipt(options);
+    return;
+}
+
 var shaderSource = File.ReadAllText(options.ShaderPath);
 using var runner = new GpuFractalSplatReceiptRunner(shaderSource);
 var receipt = runner.Run(options);
@@ -40,6 +47,57 @@ Console.WriteLine($"gpu reservoir candidates/sec: {receipt.GpuReservoirCandidate
 Console.WriteLine($"cpu submit+wait ms/frame: {receipt.CpuSubmitAndWaitMillisecondsPerFrame:0.000}");
 Console.WriteLine($"readback checksum: 0x{receipt.ReadbackChecksum:X16}");
 Console.WriteLine($"receipt: {receiptPath}");
+
+static void RunFlameHistogramReceipt(ReceiptOptions options)
+{
+    var flameSource = File.ReadAllText(options.FlamePath!);
+    var flame = FractalFlameFileParser.ParseFirst(flameSource, unchecked((int)options.Seed));
+    var points = FractalFlameChaosGame.Generate(
+        flame,
+        options.HistogramSamples,
+        options.HistogramBurnIn,
+        new FractalXorShiftRandom(options.Seed));
+    var histogram = FractalPointHistogramBuilder.Build(
+        points,
+        options.HistogramWidth,
+        options.HistogramHeight,
+        options.HistogramBounds);
+    var checksum = histogram.Bins.Aggregate(2166136261u, (hash, value) => unchecked((hash ^ (uint)value) * 16777619u));
+    var occupiedBins = histogram.Bins.Count(value => value > 0);
+    var receipt = new FlameHistogramReceipt(
+        Path.GetFullPath(options.FlamePath!),
+        flame.Name,
+        flame.Transforms.Count,
+        options.HistogramSamples,
+        options.HistogramBurnIn,
+        options.HistogramWidth,
+        options.HistogramHeight,
+        [
+            options.HistogramBounds.X,
+            options.HistogramBounds.Y,
+            options.HistogramBounds.Z,
+            options.HistogramBounds.W,
+        ],
+        histogram.HitCount,
+        occupiedBins,
+        checksum);
+
+    Directory.CreateDirectory(options.OutputDirectory);
+    var receiptPath = Path.Combine(options.OutputDirectory, $"fractal-flame-histogram-receipt-{DateTimeOffset.Now:yyyyMMdd-HHmmss}.json");
+    File.WriteAllText(receiptPath, JsonSerializer.Serialize(receipt, new JsonSerializerOptions { WriteIndented = true }));
+
+    Console.WriteLine("=== Aquarium Fractal Flame Histogram Receipt ===");
+    Console.WriteLine($"flame: {receipt.FlameName}");
+    Console.WriteLine($"source: {receipt.SourcePath}");
+    Console.WriteLine($"xforms: {receipt.TransformCount:N0}");
+    Console.WriteLine($"samples: {receipt.SampleCount:N0}");
+    Console.WriteLine($"burn-in: {receipt.BurnIn:N0}");
+    Console.WriteLine($"histogram: {receipt.Width}x{receipt.Height}");
+    Console.WriteLine($"hits: {receipt.HitCount:N0}");
+    Console.WriteLine($"occupied bins: {receipt.OccupiedBins:N0}");
+    Console.WriteLine($"histogram checksum: 0x{receipt.Checksum:X8}");
+    Console.WriteLine($"receipt: {receiptPath}");
+}
 
 internal sealed class GpuFractalSplatReceiptRunner : IDisposable
 {
@@ -368,7 +426,13 @@ internal sealed record ReceiptOptions(
     int ProgramTransformCount,
     int ReadbackSplats,
     string ShaderPath,
-    string OutputDirectory)
+    string OutputDirectory,
+    string? FlamePath,
+    int HistogramSamples,
+    int HistogramBurnIn,
+    int HistogramWidth,
+    int HistogramHeight,
+    Vector4 HistogramBounds)
 {
     public static ReceiptOptions Parse(string[] args)
     {
@@ -383,7 +447,13 @@ internal sealed record ReceiptOptions(
             0,
             64,
             Path.Combine("src", "Aquarium.Engine", "Render", "Shaders", "D3D12FractalReservoirCompute.hlsl"),
-            Path.Combine("artifacts", "fractal-splat-receipts"));
+            Path.Combine("artifacts", "fractal-splat-receipts"),
+            null,
+            8192,
+            64,
+            64,
+            64,
+            new Vector4(-8.0f, -8.0f, 8.0f, 8.0f));
         for (var index = 0; index < args.Length; index++)
         {
             var arg = args[index];
@@ -394,15 +464,35 @@ internal sealed record ReceiptOptions(
                 "--warmup" => options with { WarmupFrames = int.Parse(Next()) },
                 "--frames" => options with { MeasuredFrames = int.Parse(Next()) },
                 "--depth" => options with { Depth = int.Parse(Next()) },
-                "--seed" => options with { Seed = Convert.ToUInt32(Next(), 0) },
+                "--seed" => options with { Seed = ParseUInt32(Next()) },
                 "--candidates" => options with { CandidatesPerPass = int.Parse(Next()) },
                 "--reservoir-updates" => options with { ReservoirUpdatesPerPass = int.Parse(Next()) },
                 "--program-transforms" => options with { ProgramTransformCount = int.Parse(Next()) },
                 "--readback-splats" => options with { ReadbackSplats = int.Parse(Next()) },
                 "--shader" => options with { ShaderPath = Next() },
                 "--out" => options with { OutputDirectory = Next() },
+                "--flame" => options with { FlamePath = Next() },
+                "--histogram-samples" => options with { HistogramSamples = int.Parse(Next()) },
+                "--histogram-burn-in" => options with { HistogramBurnIn = int.Parse(Next()) },
+                "--histogram-size" => ParseHistogramSize(options, Next()),
+                "--histogram-bounds" => ParseHistogramBounds(options, Next()),
                 _ => throw new ArgumentException($"Unknown receipt option: {arg}"),
             };
+        }
+
+        if (options.FlamePath is not null)
+        {
+            if (!File.Exists(options.FlamePath))
+            {
+                throw new FileNotFoundException("Receipt flame file was not found.", options.FlamePath);
+            }
+
+            if (options.HistogramSamples <= 0 || options.HistogramBurnIn < 0 || options.HistogramWidth <= 0 || options.HistogramHeight <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(args), "Flame histogram samples and dimensions must be positive; burn-in must not be negative.");
+            }
+
+            return options;
         }
 
         if (!File.Exists(options.ShaderPath))
@@ -416,7 +506,56 @@ internal sealed record ReceiptOptions(
         }
         return options;
     }
+
+    private static ReceiptOptions ParseHistogramSize(ReceiptOptions options, string value)
+    {
+        var parts = value.Split('x', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length != 2)
+        {
+            throw new ArgumentException("Histogram size must be WIDTHxHEIGHT.");
+        }
+
+        return options with { HistogramWidth = int.Parse(parts[0]), HistogramHeight = int.Parse(parts[1]) };
+    }
+
+    private static ReceiptOptions ParseHistogramBounds(ReceiptOptions options, string value)
+    {
+        var parts = value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length != 4)
+        {
+            throw new ArgumentException("Histogram bounds must be minX,minY,maxX,maxY.");
+        }
+
+        return options with
+        {
+            HistogramBounds = new Vector4(
+                float.Parse(parts[0], System.Globalization.CultureInfo.InvariantCulture),
+                float.Parse(parts[1], System.Globalization.CultureInfo.InvariantCulture),
+                float.Parse(parts[2], System.Globalization.CultureInfo.InvariantCulture),
+                float.Parse(parts[3], System.Globalization.CultureInfo.InvariantCulture)),
+        };
+    }
+
+    private static uint ParseUInt32(string value)
+    {
+        return value.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+            ? Convert.ToUInt32(value[2..], 16)
+            : uint.Parse(value, System.Globalization.CultureInfo.InvariantCulture);
+    }
 }
+
+internal sealed record FlameHistogramReceipt(
+    string SourcePath,
+    string FlameName,
+    int TransformCount,
+    int SampleCount,
+    int BurnIn,
+    int Width,
+    int Height,
+    float[] Bounds,
+    int HitCount,
+    int OccupiedBins,
+    uint Checksum);
 
 internal sealed record GpuFractalSplatReceipt(
     string Adapter,

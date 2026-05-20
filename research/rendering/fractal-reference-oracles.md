@@ -45,6 +45,26 @@ This is not full flame parity. It is the first ruler on the desk.
 4. Lower proven flame definitions into GPU program rows. Only then should the
    live reservoir renderer use them as visual test scenes.
 
+## Local Receipt
+
+Run:
+
+```powershell
+.\scripts\fractal-flame-receipt.ps1
+```
+
+Default receipt:
+
+- fixture: `linear-spherical-bubble.flame`
+- samples: `8192`
+- histogram: `64x64`
+- bounds: `-8,-8,8,8`
+- seed: `0x0BADC0DE`
+- expected checksum: `0xAEB1C81B`
+
+This receipt is Aquarium's local CPU parser/evaluator checksum. It is not yet
+an external FLAM3/Apophysis renderer receipt.
+
 ## Sources
 
 - Apophysis 7x repository: https://github.com/wanily/apophysis7x
