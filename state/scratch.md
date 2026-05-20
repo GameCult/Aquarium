@@ -2,8 +2,9 @@
 
 ## Current Slice
 
-Aquarium's active focus is clean engine architecture and shiny Epiphany agent
-visuals.
+Aquarium's active focus is the fractal reference gate for the Perfect Machine:
+prove compact IFS/flame fixtures numerically before asking Zyphos visuals to
+carry architectural truth.
 
 Keep the engine/client boundary strict:
 
@@ -39,6 +40,10 @@ The renderer work that matters next:
   packet is `Aquarium.Engine.Fractal` plus tests, cube-face/tile keys,
   identity/tangent projections, area distortion sampler, face-edge tests, and
   a projection report.
+- Use `research/rendering/fractal-reference-oracles.md` for Apophysis/FLAM3
+  parity. Local parser/evaluator receipts are not external renderer proof.
+  `scripts/fractal-flame-reference-render.ps1` is the optional FLAM3-compatible
+  PPM receipt path when a local `flam3-render` binary is installed.
 - Use `docs/zyphos-eusocial-sync.md` before evolving Zyphos world content.
   Eusocial Interbeing owns canon in `E:\Projects\Eusocial Interbeing`; Zyphos
   owns render constraints and feeds design questions back through the vault's

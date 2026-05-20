@@ -106,6 +106,49 @@ public sealed class ApophysisReferenceParityTests
         Assert.Equal(0xAEB1C81Bu, checksum);
     }
 
+    [Fact]
+    public void PpmReferenceReceiptReadsExternalRendererOutputShape()
+    {
+        var ppm = new byte[]
+        {
+            (byte)'P', (byte)'6', (byte)'\n',
+            (byte)'#', (byte)' ', (byte)'F', (byte)'L', (byte)'A', (byte)'M', (byte)'3', (byte)'\n',
+            (byte)'2', (byte)' ', (byte)'2', (byte)'\n',
+            (byte)'2', (byte)'5', (byte)'5', (byte)'\n',
+            0, 0, 0,
+            255, 0, 0,
+            0, 128, 0,
+            0, 0, 64,
+        };
+
+        var receipt = FractalPpmImageReceiptBuilder.Build(ppm);
+
+        Assert.Equal(2, receipt.Width);
+        Assert.Equal(2, receipt.Height);
+        Assert.Equal(4, receipt.PixelCount);
+        Assert.Equal(3, receipt.NonBlackPixelCount);
+        Assert.Equal(0x605A_BDE5_13A2_D19AUL, receipt.RgbChecksum);
+        Assert.Equal(0xD56A_A5A0_E36F_3C2BUL, receipt.LuminanceChecksum);
+    }
+
+    [Fact]
+    public void PpmReferenceReceiptDoesNotTreatPixelWhitespaceAsHeader()
+    {
+        var ppm = new byte[]
+        {
+            (byte)'P', (byte)'6', (byte)'\n',
+            (byte)'1', (byte)' ', (byte)'1', (byte)'\n',
+            (byte)'2', (byte)'5', (byte)'5', (byte)'\n',
+            10, 13, 32,
+        };
+
+        var receipt = FractalPpmImageReceiptBuilder.Build(ppm);
+
+        Assert.Equal(1, receipt.PixelCount);
+        Assert.Equal(1, receipt.NonBlackPixelCount);
+        Assert.Equal(0xDD2C_094F_57F3_A456UL, receipt.RgbChecksum);
+    }
+
     private static IReadOnlyList<ReferenceAffineTransform> LoadLinearApophysisFixture(string path)
     {
         var document = XDocument.Load(path);

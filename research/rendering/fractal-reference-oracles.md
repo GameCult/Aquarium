@@ -40,8 +40,10 @@ This is not full flame parity. It is the first ruler on the desk.
    `spherical`, and `bubble` variation weights.
 2. DONE: add exact point parity for `linear`, `spherical`, and `bubble`,
    plus a deterministic histogram checksum for the mixed fixture.
-3. Add deterministic histogram parity against a local external FLAM3/Apophysis
-   compatible renderer, with generated receipts under `artifacts/parity`.
+3. DONE: add an optional external FLAM3-compatible render receipt path. When
+   `flam3-render` is available, Aquarium renders the fixture to binary PPM and
+   records image-shape, non-black pixel count, RGB checksum, and luminance
+   checksum under `artifacts/fractal-flame-reference`.
 4. Lower proven flame definitions into GPU program rows. Only then should the
    live reservoir renderer use them as visual test scenes.
 
@@ -64,6 +66,25 @@ Default receipt:
 
 This receipt is Aquarium's local CPU parser/evaluator checksum. It is not yet
 an external FLAM3/Apophysis renderer receipt.
+
+## External Renderer Receipt
+
+FLAM3 stays outside the repo and outside runtime binaries. If a local
+`flam3-render` executable is installed, run:
+
+```powershell
+.\scripts\fractal-flame-reference-render.ps1 -Flam3Render C:\path\to\flam3-render.exe
+```
+
+The script follows FLAM3's documented environment-variable interface: `in`
+selects the flame file, `out` selects the output image, `format=ppm` requests a
+plain reference image, `seed` fixes the random sequence, and `qs` controls
+quality scale. Aquarium then hashes the PPM through
+`tools/Aquarium.Fractal.Receipt --reference-ppm`.
+
+This is the first external renderer receipt. It proves the fixture can be
+rendered by the reference family and gives Aquarium a stable image artifact to
+compare as the local flame subset grows.
 
 ## Sources
 

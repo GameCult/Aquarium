@@ -11,6 +11,12 @@ using Vortice.Direct3D12;
 using Vortice.DXGI;
 
 var options = ReceiptOptions.Parse(args);
+if (options.ReferencePpmPath is not null)
+{
+    RunReferencePpmReceipt(options);
+    return;
+}
+
 if (options.FlamePath is not null)
 {
     RunFlameHistogramReceipt(options);
@@ -47,6 +53,34 @@ Console.WriteLine($"gpu reservoir candidates/sec: {receipt.GpuReservoirCandidate
 Console.WriteLine($"cpu submit+wait ms/frame: {receipt.CpuSubmitAndWaitMillisecondsPerFrame:0.000}");
 Console.WriteLine($"readback checksum: 0x{receipt.ReadbackChecksum:X16}");
 Console.WriteLine($"receipt: {receiptPath}");
+
+static void RunReferencePpmReceipt(ReceiptOptions options)
+{
+    var ppmBytes = File.ReadAllBytes(options.ReferencePpmPath!);
+    var image = FractalPpmImageReceiptBuilder.Build(ppmBytes);
+    var receipt = new ReferencePpmReceipt(
+        Path.GetFullPath(options.ReferencePpmPath!),
+        image.Width,
+        image.Height,
+        image.MaxChannelValue,
+        image.PixelCount,
+        image.NonBlackPixelCount,
+        image.RgbChecksum,
+        image.LuminanceChecksum);
+
+    Directory.CreateDirectory(options.OutputDirectory);
+    var receiptPath = Path.Combine(options.OutputDirectory, $"fractal-reference-ppm-receipt-{DateTimeOffset.Now:yyyyMMdd-HHmmss}.json");
+    File.WriteAllText(receiptPath, JsonSerializer.Serialize(receipt, new JsonSerializerOptions { WriteIndented = true }));
+
+    Console.WriteLine("=== Aquarium External Flame Reference PPM Receipt ===");
+    Console.WriteLine($"source: {receipt.SourcePath}");
+    Console.WriteLine($"image: {receipt.Width}x{receipt.Height}");
+    Console.WriteLine($"pixels: {receipt.PixelCount:N0}");
+    Console.WriteLine($"non-black pixels: {receipt.NonBlackPixelCount:N0}");
+    Console.WriteLine($"rgb checksum: 0x{receipt.RgbChecksum:X16}");
+    Console.WriteLine($"luminance checksum: 0x{receipt.LuminanceChecksum:X16}");
+    Console.WriteLine($"receipt: {receiptPath}");
+}
 
 static void RunFlameHistogramReceipt(ReceiptOptions options)
 {
@@ -428,6 +462,7 @@ internal sealed record ReceiptOptions(
     string ShaderPath,
     string OutputDirectory,
     string? FlamePath,
+    string? ReferencePpmPath,
     int HistogramSamples,
     int HistogramBurnIn,
     int HistogramWidth,
@@ -448,6 +483,7 @@ internal sealed record ReceiptOptions(
             64,
             Path.Combine("src", "Aquarium.Engine", "Render", "Shaders", "D3D12FractalReservoirCompute.hlsl"),
             Path.Combine("artifacts", "fractal-splat-receipts"),
+            null,
             null,
             8192,
             64,
@@ -472,12 +508,23 @@ internal sealed record ReceiptOptions(
                 "--shader" => options with { ShaderPath = Next() },
                 "--out" => options with { OutputDirectory = Next() },
                 "--flame" => options with { FlamePath = Next() },
+                "--reference-ppm" => options with { ReferencePpmPath = Next() },
                 "--histogram-samples" => options with { HistogramSamples = int.Parse(Next()) },
                 "--histogram-burn-in" => options with { HistogramBurnIn = int.Parse(Next()) },
                 "--histogram-size" => ParseHistogramSize(options, Next()),
                 "--histogram-bounds" => ParseHistogramBounds(options, Next()),
                 _ => throw new ArgumentException($"Unknown receipt option: {arg}"),
             };
+        }
+
+        if (options.ReferencePpmPath is not null)
+        {
+            if (!File.Exists(options.ReferencePpmPath))
+            {
+                throw new FileNotFoundException("Reference PPM file was not found.", options.ReferencePpmPath);
+            }
+
+            return options;
         }
 
         if (options.FlamePath is not null)
@@ -556,6 +603,16 @@ internal sealed record FlameHistogramReceipt(
     int HitCount,
     int OccupiedBins,
     uint Checksum);
+
+internal sealed record ReferencePpmReceipt(
+    string SourcePath,
+    int Width,
+    int Height,
+    int MaxChannelValue,
+    int PixelCount,
+    int NonBlackPixelCount,
+    ulong RgbChecksum,
+    ulong LuminanceChecksum);
 
 internal sealed record GpuFractalSplatReceipt(
     string Adapter,
