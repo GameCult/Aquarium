@@ -2027,6 +2027,21 @@ public sealed class D3D12Renderer : IAquariumRenderer
             $"{frameResources.TransientShaderDescriptors.Describe()}; " +
             $"{staticShaderDescriptorArena.Describe()}; " +
             $"{renderTargetViewArena.Describe()}");
+        if (activeFractalReservoirField.HasInput && fractalSplatBuffer is not null && fractalSdfReservoirBuffer is not null && fractalPbrReservoirBuffer is not null && fractalRadiosityReservoirBuffer is not null)
+        {
+            var residentBytes =
+                fractalSplatBuffer.SizeBytes +
+                fractalSdfReservoirBuffer.SizeBytes +
+                fractalPbrReservoirBuffer.SizeBytes +
+                fractalRadiosityReservoirBuffer.SizeBytes;
+            Console.WriteLine(
+                $"D3D12 fractal reservoirs: splats {activeFractalReservoirField.SplatCount:N0}; " +
+                $"visible {visibleFractalSplatCount:N0}; " +
+                $"updates/pass {activeFractalReservoirField.ReservoirUpdatesPerPass:N0}; " +
+                $"candidates/update {activeFractalReservoirField.CandidatesPerReservoirUpdate}; " +
+                $"resident {residentBytes / (1024.0 * 1024.0):0.0} MiB");
+        }
+
         if (accumulatedTimingFrames > 0)
         {
             var scale = 1.0 / accumulatedTimingFrames;
