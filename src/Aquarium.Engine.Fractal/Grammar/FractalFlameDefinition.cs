@@ -79,6 +79,8 @@ public readonly record struct FractalFlameTransform2D(
     string Name,
     Vector4 Matrix,
     Vector2 Translation,
+    Vector4 PostMatrix,
+    Vector2 PostTranslation,
     float Weight,
     float Color,
     FractalFlameVariationWeights Variations)
@@ -93,7 +95,10 @@ public readonly record struct FractalFlameTransform2D(
         var affine = new Vector2(
             (Matrix.X * point.X) + (Matrix.Y * point.Y) + Translation.X,
             (Matrix.Z * point.X) + (Matrix.W * point.Y) + Translation.Y);
-        return Variations.HasAny ? Variations.Apply(affine, random) : affine;
+        var varied = Variations.HasAny ? Variations.Apply(affine, random) : affine;
+        return new Vector2(
+            (PostMatrix.X * varied.X) + (PostMatrix.Y * varied.Y) + PostTranslation.X,
+            (PostMatrix.Z * varied.X) + (PostMatrix.W * varied.Y) + PostTranslation.Y);
     }
 }
 

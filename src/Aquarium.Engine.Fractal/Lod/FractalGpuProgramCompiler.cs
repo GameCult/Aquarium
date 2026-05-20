@@ -65,7 +65,9 @@ public static class FractalGpuProgramCompiler
             transform.Matrix,
             new Vector4(transform.Translation, transform.Variations.Linear, transform.Variations.Spherical),
             new Vector4(transform.Variations.Bubble, MathF.Max(transform.Weight, 0.0f), transform.Color, transform.Variations.JulianDist),
-            new Vector4(transform.Variations.Disc, transform.Variations.Julian, transform.Variations.JulianPower, transform.Variations.GaussianBlur));
+            new Vector4(transform.Variations.Disc, transform.Variations.Julian, transform.Variations.JulianPower, transform.Variations.GaussianBlur),
+            transform.PostMatrix,
+            new Vector4(transform.PostTranslation, 0.0f, 0.0f));
     }
 
     private static AquariumPackedFractalIfsTransform Pack(
@@ -85,7 +87,9 @@ public static class FractalGpuProgramCompiler
             new Vector4(claim.Center, radius, claim.Amplitude),
             new Vector4(claim.Radii, claim.RotationRadians, claim.Falloff),
             new Vector4(material, claim.Seed, rotationCos, rotationSin),
-            tileAddress);
+            tileAddress,
+            new Vector4(1.0f, 0.0f, 0.0f, 1.0f),
+            Vector4.Zero);
     }
 
     private static float StableUnit(string tags, int seed)

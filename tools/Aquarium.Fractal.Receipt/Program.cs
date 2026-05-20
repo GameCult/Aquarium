@@ -419,7 +419,9 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
                 new Vector4(branch * 0.42f, scale, 0.18f + index * 0.013f),
                 new Vector4(radius, radius * 0.62f, rotation, 4.0f),
                 new Vector4((index + 1.0f) / (transformCount + 1.0f), index * 31 + 7, MathF.Cos(rotation), MathF.Sin(rotation)),
-                new Vector4(index % 6, 0.0f, 0.0f, 0.0f));
+                new Vector4(index % 6, 0.0f, 0.0f, 0.0f),
+                new Vector4(1.0f, 0.0f, 0.0f, 1.0f),
+                Vector4.Zero);
         }
 
         return transforms;

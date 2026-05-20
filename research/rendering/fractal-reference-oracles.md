@@ -151,7 +151,8 @@ kind of embarrassing:
 ```
 
 First receipt after adding the JWildfire `variationGroup`/coefficient-layout
-slice and the `disc`, `julian`, and `gaussian_blur` variation subset:
+slice and the `disc`, `julian`, and `gaussian_blur` variation subset, before
+lowering `post`:
 
 - GPU time: `66.446 ms/frame`, `15.0 FPS` equivalent
 - visual score: `5.01%`
@@ -188,18 +189,35 @@ sample history instead of starting every splat from zero.
 
 That import report now exists. GPU and histogram flame receipts emit a sibling
 `fractal-flame-import-report-*.json` next to the numeric receipt. For the
-JWildfire selftest flame, the first report says:
+JWildfire selftest flame, the first report after `post` lowering says:
 
-- accepted fields: `14`
+- accepted fields: `15`
 - approximated fields: `3`
 - ignored fields: `45`
-- rejected fields: `12`
-- rejected geometry/sampling losses: non-identity `post` on the julian xform
-  and `wfield_*` weighting-field attributes on the disc xform
+- rejected fields: `11`
+- rejected geometry/sampling losses: `wfield_*` weighting-field attributes on
+  the disc xform
 
 This report is the next expansion gate. A flame may parse successfully and
 still be a bad import; unsupported fields must stay visible until the DSL,
 compiler, or renderer can actually own them.
+
+Lowering `post` required expanding only the small authored-program transform
+row, not the resident million-splat or reservoir packets. The closer
+CPU/GPU-slice receipt now gives:
+
+- bounds `-8,-8,8,8`: `84.19%` GPU-vs-Aquarium-CPU slice score at
+  `129.073 ms/frame`
+- bounds `-128,-128,128,128`: `88.01%` GPU-vs-Aquarium-CPU slice score at
+  `129.404 ms/frame`
+- artifact:
+  `artifacts/fractal-jwildfire-faceplant/jwildfire-vs-aquarium-post-close.png`
+
+This is not external JWildfire visual parity. It says Aquarium's GPU path is
+now much closer to Aquarium's CPU interpretation of the supported slice. The
+image is still missing JWildfire's palette, density estimation, weighting-field
+behavior, render filters, and likely more dialect detail. The speed is also
+unacceptable for realtime because depth-64 replay is the wrong execution model.
 
 ## GPU Flame Receipt
 

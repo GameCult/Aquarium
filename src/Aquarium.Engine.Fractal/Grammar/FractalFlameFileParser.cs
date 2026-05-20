@@ -62,6 +62,17 @@ public static class FractalFlameFileParser
         var translation = isJWildfireDialect
             ? new Vector2(coefs[4], coefs[5])
             : new Vector2(coefs[2], coefs[5]);
+        var post = ParseOptionalFloatList((string?)element.Attribute("post"), expectedCount: 6);
+        var postMatrix = post is null
+            ? new Vector4(1.0f, 0.0f, 0.0f, 1.0f)
+            : isJWildfireDialect
+                ? new Vector4(post[0], post[2], post[1], post[3])
+                : new Vector4(post[0], post[1], post[3], post[4]);
+        var postTranslation = post is null
+            ? Vector2.Zero
+            : isJWildfireDialect
+                ? new Vector2(post[4], post[5])
+                : new Vector2(post[2], post[5]);
         var variations = new FractalFlameVariationWeights(
             ParseOptionalFloat(variationSource, "linear", 0.0f) + ParseOptionalFloat(variationSource, "normal", 0.0f),
             ParseOptionalFloat(variationSource, "spherical", 0.0f),
@@ -79,6 +90,8 @@ public static class FractalFlameFileParser
             transformName,
             matrix,
             translation,
+            postMatrix,
+            postTranslation,
             ParseOptionalFloat(element, "weight", 1.0f),
             ParseOptionalFloat(element, "color", 0.0f),
             variations);
@@ -114,6 +127,13 @@ public static class FractalFlameFileParser
         }
 
         return values;
+    }
+
+    private static float[]? ParseOptionalFloatList(string? source, int expectedCount)
+    {
+        return string.IsNullOrWhiteSpace(source)
+            ? null
+            : ParseFloatList(source, expectedCount, "optional float list");
     }
 
     private static IReadOnlyList<string> BuildFlameFieldReports(XElement flame)
@@ -209,15 +229,7 @@ public static class FractalFlameFileParser
 
             if (name is "post")
             {
-                if (IsIdentityPost(attribute.Value))
-                {
-                    ignored.Add("post=identity");
-                }
-                else
-                {
-                    rejected.Add("post");
-                }
-
+                accepted.Add(IsIdentityPost(attribute.Value) ? "post=identity" : "post");
                 continue;
             }
 

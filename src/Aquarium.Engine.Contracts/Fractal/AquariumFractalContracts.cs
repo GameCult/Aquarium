@@ -174,7 +174,9 @@ public readonly record struct AquariumPackedFractalIfsTransform(
     Vector4 OffsetScaleAmplitude,
     Vector4 RadiiRotationFalloff,
     Vector4 MaterialSeedShape,
-    Vector4 TileAddress);
+    Vector4 TileAddress,
+    Vector4 PostMatrix,
+    Vector4 PostTranslation);
 
 [StructLayout(LayoutKind.Sequential)]
 public readonly record struct AquariumPackedSdfEnvelopeReservoir(

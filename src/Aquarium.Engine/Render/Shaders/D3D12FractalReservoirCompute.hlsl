@@ -37,6 +37,8 @@ struct FractalIfsTransform
     float4 radiiRotationFalloff;
     float4 materialSeedShape;
     float4 tileAddress;
+    float4 postMatrix;
+    float4 postTranslation;
 };
 
 cbuffer ReceiptConstants : register(b0)
@@ -184,6 +186,11 @@ float3 FractalPoint(uint index, out float radius)
                 nextPoint += blurRadius * float2(cos(blurAngle), sin(blurAngle));
             }
 
+            float4 post = transform.postMatrix;
+            float2 postT = transform.postTranslation.xy;
+            nextPoint = float2(
+                (post.x * nextPoint.x) + (post.y * nextPoint.y) + postT.x,
+                (post.z * nextPoint.x) + (post.w * nextPoint.y) + postT.y);
             p = nextPoint;
             material = transform.materialSeedShape.z;
             support *= saturate(max(length(m.xy), length(m.zw)));
