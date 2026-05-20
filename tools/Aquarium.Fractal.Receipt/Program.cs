@@ -112,6 +112,7 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
             commandList.SetComputeRootUnorderedAccessView(2, sdfReservoirs.GPUVirtualAddress);
             commandList.SetComputeRootUnorderedAccessView(3, pbrReservoirs.GPUVirtualAddress);
             commandList.SetComputeRootUnorderedAccessView(4, radiosityReservoirs.GPUVirtualAddress);
+            commandList.SetComputeRootShaderResourceView(5, splats.GPUVirtualAddress);
             commandList.EndQuery(queryHeap, QueryType.Timestamp, 0);
             Dispatch(splatPipelineState, options.SplatCount);
             commandList.ResourceBarrier(ResourceBarrier.BarrierUnorderedAccessView(splats));
@@ -209,6 +210,8 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
         commandList.SetComputeRoot32BitConstant(0, options.Seed, 3);
         commandList.SetComputeRoot32BitConstant(0, (uint)options.CandidatesPerPass, 4);
         commandList.SetComputeRoot32BitConstant(0, (uint)options.ReservoirUpdatesPerPass, 5);
+        commandList.SetComputeRoot32BitConstant(0, 0u, 6);
+        commandList.SetComputeRoot32BitConstant(0, 0u, 7);
     }
 
     private void CopyReceiptReadback(ID3D12Resource splats, ID3D12Resource sdf, ID3D12Resource pbr, ID3D12Resource radiosity, ID3D12Resource readback, ulong splatBytes, ulong reservoirBytes)
@@ -260,11 +263,12 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
     {
         var rootParameters = new[]
         {
-            new RootParameter(new RootConstants(0, 0, 6), ShaderVisibility.All),
+            new RootParameter(new RootConstants(0, 0, 8), ShaderVisibility.All),
             new RootParameter(RootParameterType.UnorderedAccessView, new RootDescriptor(0, 0), ShaderVisibility.All),
             new RootParameter(RootParameterType.UnorderedAccessView, new RootDescriptor(1, 0), ShaderVisibility.All),
             new RootParameter(RootParameterType.UnorderedAccessView, new RootDescriptor(2, 0), ShaderVisibility.All),
             new RootParameter(RootParameterType.UnorderedAccessView, new RootDescriptor(3, 0), ShaderVisibility.All),
+            new RootParameter(RootParameterType.ShaderResourceView, new RootDescriptor(0, 0), ShaderVisibility.All),
         };
         var description = new RootSignatureDescription(RootSignatureFlags.None, rootParameters, []);
         return device.CreateRootSignature(0, in description, RootSignatureVersion.Version1);

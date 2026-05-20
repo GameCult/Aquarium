@@ -16,6 +16,7 @@ public static class ZyphosSceneBuilder
             {
                 SplatCount = 2_000_000,
                 ReservoirUpdatesPerPass = 50_000,
+                ProgramTransforms = fractalPlan.GpuProgramTransforms,
             },
             SdfObjects = BuildSdfObjects(timeSeconds, previousTimeSeconds),
             SdfLights = BuildSdfLights(timeSeconds),

@@ -89,6 +89,7 @@ public sealed class ZyphosFractalTerrainTests
         Assert.Equal(2_000_000, scene.FractalReservoirField.SplatCount);
         Assert.Equal(50_000, scene.FractalReservoirField.ReservoirUpdatesPerPass);
         Assert.Equal(2, scene.FractalReservoirField.CandidatesPerReservoirUpdate);
+        Assert.NotEmpty(scene.FractalReservoirField.ProgramTransforms);
     }
 
     [Fact]
@@ -110,6 +111,7 @@ public sealed class ZyphosFractalTerrainTests
         Assert.Contains("surfacePageResident:", dump, StringComparison.Ordinal);
         Assert.Contains("surfacePagePayloads:", dump, StringComparison.Ordinal);
         Assert.Contains("projectedSurfaceSdfSplats:", dump, StringComparison.Ordinal);
+        Assert.Contains("gpuProgramTransforms:", dump, StringComparison.Ordinal);
         Assert.Contains("surfacePageRequests:", dump, StringComparison.Ordinal);
         Assert.Contains("surfacePageEvictions:", dump, StringComparison.Ordinal);
         Assert.Contains("selected:", dump, StringComparison.Ordinal);

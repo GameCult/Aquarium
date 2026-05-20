@@ -31,6 +31,14 @@ struct RadiosityReservoir
     float4 validation;
 };
 
+struct FractalIfsTransform
+{
+    float4 offsetScaleAmplitude;
+    float4 radiiRotationFalloff;
+    float4 materialSeedShape;
+    float4 domain;
+};
+
 cbuffer ReceiptConstants : register(b0)
 {
     uint SplatCount;
@@ -39,12 +47,15 @@ cbuffer ReceiptConstants : register(b0)
     uint Seed;
     uint CandidatesPerPass;
     uint ReservoirUpdatesPerPass;
+    uint ProgramTransformCount;
+    uint ProgramMode;
 };
 
 RWStructuredBuffer<FractalSdfSplat> Splats : register(u0);
 RWStructuredBuffer<SdfEnvelopeReservoir> SdfReservoirs : register(u1);
 RWStructuredBuffer<PbrMaterialReservoir> PbrReservoirs : register(u2);
 RWStructuredBuffer<RadiosityReservoir> RadiosityReservoirs : register(u3);
+StructuredBuffer<FractalIfsTransform> ProgramTransforms : register(t0);
 
 uint Hash(uint x)
 {
@@ -63,6 +74,35 @@ float Random01(uint value)
 
 float3 FractalPoint(uint index, out float radius)
 {
+    if (ProgramTransformCount > 0u)
+    {
+        uint n = index ^ Seed;
+        float2 p = 0.0;
+        float z = 0.0;
+        float scale = 1.0;
+        float material = 0.0;
+        radius = 0.01;
+        [loop]
+        for (uint depth = 0; depth < Depth; depth++)
+        {
+            uint transformIndex = Hash(n + depth * 747796405u) % ProgramTransformCount;
+            FractalIfsTransform transform = ProgramTransforms[transformIndex];
+            float angle = transform.radiiRotationFalloff.z;
+            float c = cos(angle);
+            float s = sin(angle);
+            float2 rotated = float2((p.x * c) - (p.y * s), (p.x * s) + (p.y * c));
+            float childScale = saturate(transform.offsetScaleAmplitude.z);
+            p = rotated * max(childScale, 0.01) + transform.offsetScaleAmplitude.xy;
+            scale *= max(childScale, 0.01);
+            z += transform.offsetScaleAmplitude.w * scale;
+            radius = max(max(transform.radiiRotationFalloff.x, transform.radiiRotationFalloff.y) * max(scale, 0.001), 0.0001);
+            material = transform.materialSeedShape.x;
+            n = Hash(n + asuint(transform.materialSeedShape.y) + transformIndex + depth);
+        }
+
+        return float3(p, z + material * 0.05);
+    }
+
     uint n = index ^ Seed;
     float3 p = 0.0;
     float scale = 1.0;

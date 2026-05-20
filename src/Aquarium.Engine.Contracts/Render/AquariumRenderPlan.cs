@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
+using Aquarium.Engine.Fractal;
 
 namespace Aquarium.Engine.Render;
 
@@ -455,6 +456,8 @@ public sealed class AquariumFractalReservoirField
     public int CandidatesPerReservoirUpdate { get; init; } = 2;
 
     public int ReservoirUpdatesPerPass { get; init; }
+
+    public IReadOnlyList<AquariumPackedFractalIfsTransform> ProgramTransforms { get; init; } = [];
 
     public bool HasInput =>
         SplatCount > 0 &&

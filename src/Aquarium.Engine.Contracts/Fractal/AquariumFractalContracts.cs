@@ -170,6 +170,13 @@ public readonly record struct AquariumPackedFractalSdfSplat3D(
     Vector4 Key);
 
 [StructLayout(LayoutKind.Sequential)]
+public readonly record struct AquariumPackedFractalIfsTransform(
+    Vector4 OffsetScaleAmplitude,
+    Vector4 RadiiRotationFalloff,
+    Vector4 MaterialSeedShape,
+    Vector4 Domain);
+
+[StructLayout(LayoutKind.Sequential)]
 public readonly record struct AquariumPackedSdfEnvelopeReservoir(
     Vector4 CenterRadius,
     Vector4 RadiiFalloff,
