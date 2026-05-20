@@ -168,11 +168,11 @@ float3 zyFractalDomainDebug(float3 dir)
     float materialMask;
     float authoredHeight = zyAuthoredBrushTerrain(dir, materialMask);
     float2 grid = abs(frac((faceUv * 0.5 + 0.5) * 8.0) - 0.5);
-    float line = 1.0 - smoothstep(0.015, 0.055, min(grid.x, grid.y));
+    float gridLine = 1.0 - smoothstep(0.015, 0.055, min(grid.x, grid.y));
     float3 faceColor = zyFaceDebugColor(face);
     float signedHeight = authoredHeight >= 0.0 ? 1.0 : 0.0;
     float3 brushColor = lerp(float3(0.12, 0.28, 1.0), float3(1.0, 0.42, 0.12), signedHeight) * saturate(materialMask * 5.0);
-    return saturate(faceColor * 0.28 + line.xxx * 0.34 + brushColor);
+    return saturate(faceColor * 0.28 + gridLine.xxx * 0.34 + brushColor);
 }
 
 float zyTileRelief(float2 uv, float level, float amplitude, float ridgeBias)

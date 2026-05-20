@@ -33,6 +33,8 @@ public sealed class AquariumShaderManifest
 
     public string FractalReservoirShader { get; private set; } = "D3D12FractalReservoirCompute.hlsl";
 
+    public string FractalSplatRenderShader { get; private set; } = "D3D12FractalSplatRender.hlsl";
+
     public string PostShader { get; private set; } = "D3D12Post.hlsl";
 
     public string SdfCommonInclude { get; private set; } = "D3D12SdfCommon.hlsli";
@@ -80,6 +82,12 @@ public sealed class AquariumShaderManifest
     public AquariumShaderManifest FractalReservoir(string path)
     {
         FractalReservoirShader = path;
+        return this;
+    }
+
+    public AquariumShaderManifest FractalSplatRender(string path)
+    {
+        FractalSplatRenderShader = path;
         return this;
     }
 
