@@ -219,6 +219,13 @@ image is still missing JWildfire's palette, density estimation, weighting-field
 behavior, render filters, and likely more dialect detail. The speed is also
 unacceptable for realtime because depth-64 replay is the wrong execution model.
 
+The first persistent-iteration invariant is now tested on CPU:
+`FractalFlameIterationState` plus `FractalFlameIterationStepper` prove that
+advancing one sample by 64 iterations in one call matches advancing the same
+state in eight 8-iteration chunks. This is not a CPU renderer. It is the
+mockable contract the GPU state buffer must preserve when the shader stops
+replaying every splat from zero.
+
 ## GPU Flame Receipt
 
 The flame fixture can now drive the D3D12 reservoir receipt directly:
