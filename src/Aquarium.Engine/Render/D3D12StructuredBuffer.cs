@@ -26,6 +26,10 @@ internal sealed class D3D12StructuredBuffer : IDisposable
 
     public ID3D12Resource Resource { get; }
 
+    public int ElementCount => elementCount;
+
+    public int StrideBytes => strideBytes;
+
     public ResourceStates State { get; private set; } = ResourceStates.Common;
 
     public int SizeBytes { get; }

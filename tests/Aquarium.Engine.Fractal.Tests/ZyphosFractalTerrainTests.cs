@@ -80,6 +80,18 @@ public sealed class ZyphosFractalTerrainTests
     }
 
     [Fact]
+    public void ZyphosSceneRequestsGpuFractalReservoirField()
+    {
+        var shot = ZyphosCameraComposer.Compose(ZyphosSpatialDomainCatalog.CanopyLeaf, 0.1f, 0.4f, 0.1f, 0.0f);
+        var scene = ZyphosSceneBuilder.Build(1.0f, 0.9f, ZyphosFractalTerrain.BuildRenderPlan(shot));
+
+        Assert.True(scene.FractalReservoirField.HasInput);
+        Assert.Equal(2_000_000, scene.FractalReservoirField.SplatCount);
+        Assert.Equal(50_000, scene.FractalReservoirField.ReservoirUpdatesPerPass);
+        Assert.Equal(2, scene.FractalReservoirField.CandidatesPerReservoirUpdate);
+    }
+
+    [Fact]
     public void ZyphosFractalPlanDebugDumpReportsResourceBudgets()
     {
         var shot = ZyphosCameraComposer.Compose(ZyphosSpatialDomainCatalog.CanopyLeaf, 0.1f, 0.4f, 0.1f, 0.0f);

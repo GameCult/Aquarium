@@ -12,6 +12,11 @@ public static class ZyphosSceneBuilder
             TraceHeightFieldSurface = false,
             UseStarfieldBackground = true,
             HeightFieldBrushes = fractalPlan.HeightBrushes,
+            FractalReservoirField = new AquariumFractalReservoirField
+            {
+                SplatCount = 2_000_000,
+                ReservoirUpdatesPerPass = 50_000,
+            },
             SdfObjects = BuildSdfObjects(timeSeconds, previousTimeSeconds),
             SdfLights = BuildSdfLights(timeSeconds),
         };

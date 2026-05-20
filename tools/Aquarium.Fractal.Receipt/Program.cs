@@ -114,6 +114,7 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
             commandList.SetComputeRootUnorderedAccessView(4, radiosityReservoirs.GPUVirtualAddress);
             commandList.EndQuery(queryHeap, QueryType.Timestamp, 0);
             Dispatch(splatPipelineState, options.SplatCount);
+            commandList.ResourceBarrier(ResourceBarrier.BarrierUnorderedAccessView(splats));
             Dispatch(sdfPipelineState, options.ReservoirUpdatesPerPass);
             Dispatch(pbrPipelineState, options.ReservoirUpdatesPerPass);
             Dispatch(radiosityPipelineState, options.ReservoirUpdatesPerPass);

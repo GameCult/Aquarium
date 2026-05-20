@@ -1,4 +1,5 @@
 using Aquarium.Engine.Audio;
+using Aquarium.Engine.Fractal;
 using Aquarium.Engine.Input;
 using Aquarium.Engine.Render.Features;
 using Aquarium.Engine.Render.Graph;
@@ -65,6 +66,11 @@ public sealed class D3D12Renderer : IAquariumRenderer
     private const int RootFusionAcousticConstraints = 4;
     private const int RootFusionOutput = 5;
     private const int RootFusionNativePoints = 6;
+    private const int RootFractalConstants = 0;
+    private const int RootFractalSplats = 1;
+    private const int RootFractalSdfReservoirs = 2;
+    private const int RootFractalPbrReservoirs = 3;
+    private const int RootFractalRadiosityReservoirs = 4;
     private static readonly DebugUi.DebugUiOption[] RenderDebugOptions =
     [
         new(0, "Final"),
@@ -101,11 +107,16 @@ public sealed class D3D12Renderer : IAquariumRenderer
     private readonly ID3D12GraphicsCommandList commandList;
     private readonly ID3D12RootSignature fullscreenRootSignature;
     private readonly ID3D12RootSignature localCastFusionRootSignature;
+    private readonly ID3D12RootSignature fractalReservoirRootSignature;
     private ID3D12PipelineState? heightFieldBasePipelineState;
     private ID3D12PipelineState? heightFieldBrushPipelineState;
     private ID3D12PipelineState? scenePipelineState;
     private ID3D12PipelineState? temporalGaussianPipelineState;
     private ID3D12PipelineState? localCastFusionPipelineState;
+    private ID3D12PipelineState? fractalSplatPipelineState;
+    private ID3D12PipelineState? fractalSdfReservoirPipelineState;
+    private ID3D12PipelineState? fractalPbrReservoirPipelineState;
+    private ID3D12PipelineState? fractalRadiosityReservoirPipelineState;
     private ID3D12PipelineState?[] sdfProxyPipelineStates = [];
     private ID3D12PipelineState? bloomPrefilterPipelineState;
     private ID3D12PipelineState? bloomDownsamplePipelineState;
@@ -150,6 +161,10 @@ public sealed class D3D12Renderer : IAquariumRenderer
     private readonly D3D12StructuredBuffer gpuFusionSeedBuffer;
     private readonly D3D12StructuredBuffer gpuFusionPointBuffer;
     private readonly D3D12StructuredBuffer temporalGaussianBuffer;
+    private D3D12StructuredBuffer? fractalSplatBuffer;
+    private D3D12StructuredBuffer? fractalSdfReservoirBuffer;
+    private D3D12StructuredBuffer? fractalPbrReservoirBuffer;
+    private D3D12StructuredBuffer? fractalRadiosityReservoirBuffer;
     private readonly Dictionary<string, D3D12ExternalSensorTexture> externalSensorTextures = new(StringComparer.Ordinal);
     private readonly D3D12CubeTexture studioPmremTexture;
     private readonly D3D12CubeTexture studioIrradianceTexture;
@@ -167,6 +182,7 @@ public sealed class D3D12Renderer : IAquariumRenderer
     private int gpuFusionSeedCount;
     private int gpuFusionPointCount;
     private bool temporalGaussiansGpuGenerated;
+    private AquariumFractalReservoirField activeFractalReservoirField = AquariumFractalReservoirField.Empty;
     private Viewport viewport;
     private RawRect scissorRect;
     private int width;
@@ -294,6 +310,8 @@ public sealed class D3D12Renderer : IAquariumRenderer
         fullscreenRootSignature.Name = "Aquarium D3D12 Fullscreen Root Signature";
         localCastFusionRootSignature = CreateLocalCastFusionRootSignature();
         localCastFusionRootSignature.Name = "Aquarium D3D12 LocalCast Fusion Root Signature";
+        fractalReservoirRootSignature = CreateFractalReservoirRootSignature();
+        fractalReservoirRootSignature.Name = "Aquarium D3D12 Fractal Reservoir Root Signature";
         CaptureShaderWriteTimes();
         StartPipelineBuild("initial");
         viewport = new Viewport(0.0f, 0.0f, width, height);
@@ -529,6 +547,7 @@ public sealed class D3D12Renderer : IAquariumRenderer
         }
 
         CopySceneState(frame.Scene);
+        EnsureFractalReservoirBuffers(activeFractalReservoirField);
         var activeGpuSensorInput = frame.Scene.GpuSensorFrame.HasInput;
         var activeAccumulationWindow = activeGpuSensorInput
             ? frame.Scene.GpuSensorFrame.AccumulationWindowSeconds
@@ -649,6 +668,7 @@ public sealed class D3D12Renderer : IAquariumRenderer
         commandList.BeginEvent("Aquarium D3D12 Frame");
         UploadSceneStructuredResources(commandList, frameResources);
         DispatchLocalCastGpuFusion(commandList, frameResources);
+        DispatchFractalReservoirs(commandList);
         RenderHeightField(commandList, frameResources);
         RenderSceneAndPresent(new D3D12PassContext(commandList, frameResources.BackBuffer, frameResources.BackBufferRenderTargetView.Cpu), frameResources);
         commandList.EndEvent();
@@ -779,6 +799,10 @@ public sealed class D3D12Renderer : IAquariumRenderer
         && scenePipelineState is not null
         && temporalGaussianPipelineState is not null
         && localCastFusionPipelineState is not null
+        && fractalSplatPipelineState is not null
+        && fractalSdfReservoirPipelineState is not null
+        && fractalPbrReservoirPipelineState is not null
+        && fractalRadiosityReservoirPipelineState is not null
         && sdfProxyPipelineStates.All(pipeline => pipeline is not null)
         && bloomPrefilterPipelineState is not null
         && bloomDownsamplePipelineState is not null
@@ -817,8 +841,10 @@ public sealed class D3D12Renderer : IAquariumRenderer
         DisposePipelineStates();
         fullscreenRootSignature.Dispose();
         localCastFusionRootSignature.Dispose();
+        fractalReservoirRootSignature.Dispose();
         studioIrradianceTexture.Dispose();
         studioPmremTexture.Dispose();
+        DisposeFractalReservoirBuffers();
         temporalGaussianBuffer.Dispose();
         gpuFusionPointBuffer.Dispose();
         gpuFusionSeedBuffer.Dispose();
@@ -972,6 +998,14 @@ public sealed class D3D12Renderer : IAquariumRenderer
         temporalGaussian.Name = "Aquarium D3D12 Temporal Gaussian Pipeline";
         var localCastFusion = CreateLocalCastFusionPipelineState(paths.LocalCastFusion);
         localCastFusion.Name = "Aquarium D3D12 LocalCast Fusion Compute Pipeline";
+        var fractalSplat = CreateFractalReservoirPipelineState(paths.FractalReservoir, "D3D12FractalSplatReceiptCS");
+        fractalSplat.Name = "Aquarium D3D12 Fractal Splat Compute Pipeline";
+        var fractalSdfReservoir = CreateFractalReservoirPipelineState(paths.FractalReservoir, "D3D12SdfEnvelopeReservoirCS");
+        fractalSdfReservoir.Name = "Aquarium D3D12 Fractal SDF Reservoir Compute Pipeline";
+        var fractalPbrReservoir = CreateFractalReservoirPipelineState(paths.FractalReservoir, "D3D12PbrMaterialReservoirCS");
+        fractalPbrReservoir.Name = "Aquarium D3D12 Fractal PBR Reservoir Compute Pipeline";
+        var fractalRadiosityReservoir = CreateFractalReservoirPipelineState(paths.FractalReservoir, "D3D12RadiosityReservoirCS");
+        fractalRadiosityReservoir.Name = "Aquarium D3D12 Fractal Radiosity Reservoir Compute Pipeline";
         var sdfProxies = new ID3D12PipelineState[paths.SdfShaders.Count];
         for (var index = 0; index < paths.SdfShaders.Count; index++)
         {
@@ -996,6 +1030,10 @@ public sealed class D3D12Renderer : IAquariumRenderer
             scene,
             temporalGaussian,
             localCastFusion,
+            fractalSplat,
+            fractalSdfReservoir,
+            fractalPbrReservoir,
+            fractalRadiosityReservoir,
             sdfProxies,
             bloomPrefilter,
             bloomDownsample,
@@ -1270,6 +1308,67 @@ public sealed class D3D12Renderer : IAquariumRenderer
         }
 
         graphRenderTargets.Clear();
+    }
+
+    private void EnsureFractalReservoirBuffers(AquariumFractalReservoirField field)
+    {
+        if (!field.HasInput)
+        {
+            return;
+        }
+
+        if (fractalSplatBuffer is not null && fractalSplatBuffer.ElementCount >= field.SplatCount)
+        {
+            return;
+        }
+
+        WaitForGpu();
+        DisposeFractalReservoirBuffers();
+        fractalSplatBuffer = CreateFractalReservoirBuffer<AquariumPackedFractalSdfSplat3D>(
+            field.SplatCount,
+            "fractal-sdf-splat-buffer",
+            "Aquarium D3D12 Fractal SDF Splat Buffer");
+        fractalSdfReservoirBuffer = CreateFractalReservoirBuffer<AquariumPackedSdfEnvelopeReservoir>(
+            field.SplatCount,
+            "fractal-sdf-envelope-reservoir-buffer",
+            "Aquarium D3D12 Fractal SDF Envelope Reservoir Buffer");
+        fractalPbrReservoirBuffer = CreateFractalReservoirBuffer<AquariumPackedPbrMaterialReservoir>(
+            field.SplatCount,
+            "fractal-pbr-material-reservoir-buffer",
+            "Aquarium D3D12 Fractal PBR Material Reservoir Buffer");
+        fractalRadiosityReservoirBuffer = CreateFractalReservoirBuffer<AquariumPackedRadiosityReservoir>(
+            field.SplatCount,
+            "fractal-radiosity-reservoir-buffer",
+            "Aquarium D3D12 Fractal Radiosity Reservoir Buffer");
+    }
+
+    private D3D12StructuredBuffer CreateFractalReservoirBuffer<T>(int elementCount, string registryName, string resourceName)
+        where T : unmanaged
+    {
+        var buffer = new D3D12StructuredBuffer(
+            device,
+            elementCount,
+            Marshal.SizeOf<T>(),
+            resourceName,
+            allowUnorderedAccess: true);
+        resourceRegistry.Add(registryName, buffer);
+        return buffer;
+    }
+
+    private void DisposeFractalReservoirBuffers()
+    {
+        resourceRegistry.RemoveStructuredBuffer("fractal-radiosity-reservoir-buffer");
+        resourceRegistry.RemoveStructuredBuffer("fractal-pbr-material-reservoir-buffer");
+        resourceRegistry.RemoveStructuredBuffer("fractal-sdf-envelope-reservoir-buffer");
+        resourceRegistry.RemoveStructuredBuffer("fractal-sdf-splat-buffer");
+        fractalRadiosityReservoirBuffer?.Dispose();
+        fractalPbrReservoirBuffer?.Dispose();
+        fractalSdfReservoirBuffer?.Dispose();
+        fractalSplatBuffer?.Dispose();
+        fractalRadiosityReservoirBuffer = null;
+        fractalPbrReservoirBuffer = null;
+        fractalSdfReservoirBuffer = null;
+        fractalSplatBuffer = null;
     }
 
     private (int Width, int Height) ResolveGraphTargetSize(AquariumTargetSize size)
@@ -1560,6 +1659,58 @@ public sealed class D3D12Renderer : IAquariumRenderer
         }
     }
 
+    private void DispatchFractalReservoirs(ID3D12GraphicsCommandList activeCommandList)
+    {
+        if (!activeFractalReservoirField.HasInput ||
+            fractalSplatBuffer is null ||
+            fractalSdfReservoirBuffer is null ||
+            fractalPbrReservoirBuffer is null ||
+            fractalRadiosityReservoirBuffer is null)
+        {
+            return;
+        }
+
+        activeCommandList.BeginEvent("Fractal Reservoir GPU Update");
+        try
+        {
+            fractalSplatBuffer.Transition(activeCommandList, ResourceStates.UnorderedAccess);
+            fractalSdfReservoirBuffer.Transition(activeCommandList, ResourceStates.UnorderedAccess);
+            fractalPbrReservoirBuffer.Transition(activeCommandList, ResourceStates.UnorderedAccess);
+            fractalRadiosityReservoirBuffer.Transition(activeCommandList, ResourceStates.UnorderedAccess);
+            activeCommandList.SetComputeRootSignature(fractalReservoirRootSignature);
+            BindFractalReservoirConstants(activeCommandList);
+            activeCommandList.SetComputeRootUnorderedAccessView(RootFractalSplats, fractalSplatBuffer.Resource.GPUVirtualAddress);
+            activeCommandList.SetComputeRootUnorderedAccessView(RootFractalSdfReservoirs, fractalSdfReservoirBuffer.Resource.GPUVirtualAddress);
+            activeCommandList.SetComputeRootUnorderedAccessView(RootFractalPbrReservoirs, fractalPbrReservoirBuffer.Resource.GPUVirtualAddress);
+            activeCommandList.SetComputeRootUnorderedAccessView(RootFractalRadiosityReservoirs, fractalRadiosityReservoirBuffer.Resource.GPUVirtualAddress);
+            Dispatch(fractalSplatPipelineState!, activeFractalReservoirField.SplatCount);
+            activeCommandList.ResourceBarrier(ResourceBarrier.BarrierUnorderedAccessView(fractalSplatBuffer.Resource));
+            Dispatch(fractalSdfReservoirPipelineState!, activeFractalReservoirField.ReservoirUpdatesPerPass);
+            Dispatch(fractalPbrReservoirPipelineState!, activeFractalReservoirField.ReservoirUpdatesPerPass);
+            Dispatch(fractalRadiosityReservoirPipelineState!, activeFractalReservoirField.ReservoirUpdatesPerPass);
+        }
+        finally
+        {
+            activeCommandList.EndEvent();
+        }
+
+        void Dispatch(ID3D12PipelineState pipelineState, int elementCount)
+        {
+            activeCommandList.SetPipelineState(pipelineState);
+            activeCommandList.Dispatch((uint)((elementCount + 255) / 256), 1, 1);
+        }
+    }
+
+    private void BindFractalReservoirConstants(ID3D12GraphicsCommandList activeCommandList)
+    {
+        activeCommandList.SetComputeRoot32BitConstant(RootFractalConstants, (uint)activeFractalReservoirField.SplatCount, 0);
+        activeCommandList.SetComputeRoot32BitConstant(RootFractalConstants, (uint)temporalFrameIndex, 1);
+        activeCommandList.SetComputeRoot32BitConstant(RootFractalConstants, (uint)activeFractalReservoirField.Depth, 2);
+        activeCommandList.SetComputeRoot32BitConstant(RootFractalConstants, activeFractalReservoirField.Seed, 3);
+        activeCommandList.SetComputeRoot32BitConstant(RootFractalConstants, (uint)activeFractalReservoirField.CandidatesPerReservoirUpdate, 4);
+        activeCommandList.SetComputeRoot32BitConstant(RootFractalConstants, (uint)activeFractalReservoirField.ReservoirUpdatesPerPass, 5);
+    }
+
     private void CreateGpuSensorTextureViews(AquariumGpuSensorFrame sensorFrame, D3D12DescriptorSlot firstDescriptor)
     {
         var activeHandles = new HashSet<string>(StringComparer.Ordinal);
@@ -1660,6 +1811,9 @@ public sealed class D3D12Renderer : IAquariumRenderer
         gpuFusionPointCount = 0;
         gpuFusionPointSource = default;
         temporalGaussiansGpuGenerated = false;
+        activeFractalReservoirField = scene.FractalReservoirField.HasInput
+            ? scene.FractalReservoirField
+            : AquariumFractalReservoirField.Empty;
         heightFieldBrushConstants = D3D12HeightFieldBrushConstants.FromBrushes(scene.HeightFieldBrushes);
 
         var objectCount = Math.Min(scene.SdfObjects.Count, MaxSdfObjectCount);
@@ -2033,6 +2187,10 @@ public sealed class D3D12Renderer : IAquariumRenderer
                 scenePipelineState!,
                 temporalGaussianPipelineState!,
                 localCastFusionPipelineState!,
+                fractalSplatPipelineState!,
+                fractalSdfReservoirPipelineState!,
+                fractalPbrReservoirPipelineState!,
+                fractalRadiosityReservoirPipelineState!,
                 sdfProxyPipelineStates.Select(pipeline => pipeline!).ToArray(),
                 bloomPrefilterPipelineState!,
                 bloomDownsamplePipelineState!,
@@ -2049,6 +2207,10 @@ public sealed class D3D12Renderer : IAquariumRenderer
         scenePipelineState = pipelines.Scene;
         temporalGaussianPipelineState = pipelines.TemporalGaussian;
         localCastFusionPipelineState = pipelines.LocalCastFusion;
+        fractalSplatPipelineState = pipelines.FractalSplat;
+        fractalSdfReservoirPipelineState = pipelines.FractalSdfReservoir;
+        fractalPbrReservoirPipelineState = pipelines.FractalPbrReservoir;
+        fractalRadiosityReservoirPipelineState = pipelines.FractalRadiosityReservoir;
         for (var index = 0; index < sdfProxyPipelineStates.Length; index++)
         {
             sdfProxyPipelineStates[index] = pipelines.SdfProxies[index];
@@ -2068,6 +2230,10 @@ public sealed class D3D12Renderer : IAquariumRenderer
         scenePipelineState = null;
         temporalGaussianPipelineState = null;
         localCastFusionPipelineState = null;
+        fractalSplatPipelineState = null;
+        fractalSdfReservoirPipelineState = null;
+        fractalPbrReservoirPipelineState = null;
+        fractalRadiosityReservoirPipelineState = null;
         Array.Clear(sdfProxyPipelineStates);
         bloomPrefilterPipelineState = null;
         bloomDownsamplePipelineState = null;
@@ -2336,6 +2502,23 @@ public sealed class D3D12Renderer : IAquariumRenderer
         return device.CreateRootSignature(0, in description, RootSignatureVersion.Version1);
     }
 
+    private ID3D12RootSignature CreateFractalReservoirRootSignature()
+    {
+        var rootParameters = new[]
+        {
+            new RootParameter(new RootConstants(0, 0, 6), ShaderVisibility.All),
+            new RootParameter(RootParameterType.UnorderedAccessView, new RootDescriptor(0, 0), ShaderVisibility.All),
+            new RootParameter(RootParameterType.UnorderedAccessView, new RootDescriptor(1, 0), ShaderVisibility.All),
+            new RootParameter(RootParameterType.UnorderedAccessView, new RootDescriptor(2, 0), ShaderVisibility.All),
+            new RootParameter(RootParameterType.UnorderedAccessView, new RootDescriptor(3, 0), ShaderVisibility.All),
+        };
+        var description = new RootSignatureDescription(
+            RootSignatureFlags.None,
+            rootParameters,
+            []);
+        return device.CreateRootSignature(0, in description, RootSignatureVersion.Version1);
+    }
+
     private FrameResources CreateFrameResources(int index)
     {
         var commandAllocator = device.CreateCommandAllocator(CommandListType.Direct);
@@ -2372,6 +2555,17 @@ public sealed class D3D12Renderer : IAquariumRenderer
         var description = new ComputePipelineStateDescription
         {
             RootSignature = localCastFusionRootSignature,
+            ComputeShader = computeShader,
+        };
+        return device.CreateComputePipelineState(description);
+    }
+
+    private ID3D12PipelineState CreateFractalReservoirPipelineState(string path, string entryPoint)
+    {
+        var computeShader = CompileShader(path, entryPoint, "cs_5_0");
+        var description = new ComputePipelineStateDescription
+        {
+            RootSignature = fractalReservoirRootSignature,
             ComputeShader = computeShader,
         };
         return device.CreateComputePipelineState(description);
@@ -2566,6 +2760,7 @@ public sealed class D3D12Renderer : IAquariumRenderer
         string Scene,
         string TemporalGaussian,
         string LocalCastFusion,
+        string FractalReservoir,
         string SdfCommon,
         string SdfProxy,
         IReadOnlyList<string> SdfShaders,
@@ -2573,7 +2768,7 @@ public sealed class D3D12Renderer : IAquariumRenderer
         IReadOnlyList<string> Includes,
         string Post)
     {
-        public IReadOnlyList<string> All { get; } = [HeightField, Scene, TemporalGaussian, LocalCastFusion, SdfCommon, SdfProxy, ..SdfShaders, SdfMath, ..Includes, Post];
+        public IReadOnlyList<string> All { get; } = [HeightField, Scene, TemporalGaussian, LocalCastFusion, FractalReservoir, SdfCommon, SdfProxy, ..SdfShaders, SdfMath, ..Includes, Post];
 
         public static D3D12ShaderPaths FromManifest(string root, AquariumShaderManifest manifest)
         {
@@ -2586,6 +2781,7 @@ public sealed class D3D12Renderer : IAquariumRenderer
                 shaderPath(manifest.SceneShader),
                 shaderPath(manifest.TemporalGaussianShader),
                 shaderPath(manifest.LocalCastFusionShader),
+                shaderPath(manifest.FractalReservoirShader),
                 shaderPath(manifest.SdfCommonInclude),
                 shaderPath(manifest.SdfProxyInclude),
                 manifest.SdfShaderPaths.Select(shaderPath).ToArray(),
@@ -2601,6 +2797,10 @@ public sealed class D3D12Renderer : IAquariumRenderer
         ID3D12PipelineState Scene,
         ID3D12PipelineState TemporalGaussian,
         ID3D12PipelineState LocalCastFusion,
+        ID3D12PipelineState FractalSplat,
+        ID3D12PipelineState FractalSdfReservoir,
+        ID3D12PipelineState FractalPbrReservoir,
+        ID3D12PipelineState FractalRadiosityReservoir,
         IReadOnlyList<ID3D12PipelineState> SdfProxies,
         ID3D12PipelineState BloomPrefilter,
         ID3D12PipelineState BloomDownsample,
@@ -2615,6 +2815,10 @@ public sealed class D3D12Renderer : IAquariumRenderer
             BloomBlurHorizontal.Dispose();
             BloomDownsample.Dispose();
             BloomPrefilter.Dispose();
+            FractalRadiosityReservoir.Dispose();
+            FractalPbrReservoir.Dispose();
+            FractalSdfReservoir.Dispose();
+            FractalSplat.Dispose();
             LocalCastFusion.Dispose();
             TemporalGaussian.Dispose();
             foreach (var sdfProxy in SdfProxies)
