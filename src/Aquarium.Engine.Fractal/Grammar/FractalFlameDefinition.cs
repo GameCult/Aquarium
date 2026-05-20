@@ -5,11 +5,22 @@ namespace Aquarium.Engine.Fractal.Grammar;
 public readonly record struct FractalFlameVariationWeights(
     float Linear,
     float Spherical,
-    float Bubble)
+    float Bubble,
+    float Disc = 0.0f,
+    float Julian = 0.0f,
+    float JulianPower = 2.0f,
+    float JulianDist = 1.0f,
+    float GaussianBlur = 0.0f)
 {
-    public bool HasAny => Linear != 0.0f || Spherical != 0.0f || Bubble != 0.0f;
+    public bool HasAny =>
+        Linear != 0.0f ||
+        Spherical != 0.0f ||
+        Bubble != 0.0f ||
+        Disc != 0.0f ||
+        Julian != 0.0f ||
+        GaussianBlur != 0.0f;
 
-    public Vector2 Apply(Vector2 point)
+    public Vector2 Apply(Vector2 point, IFractalRandom? random = null)
     {
         var result = Vector2.Zero;
         if (Linear != 0.0f)
@@ -28,7 +39,39 @@ public readonly record struct FractalFlameVariationWeights(
             result += point * (Bubble * 4.0f / (radiusSquared + 4.0f));
         }
 
+        if (Disc != 0.0f)
+        {
+            var radius = MathF.Sqrt(radiusSquared);
+            var theta = MathF.Atan2(point.Y, point.X);
+            var scaledTheta = Disc * theta / MathF.PI;
+            result += new Vector2(
+                MathF.Sin(MathF.PI * radius) * scaledTheta,
+                MathF.Cos(MathF.PI * radius) * scaledTheta);
+        }
+
+        if (Julian != 0.0f)
+        {
+            var power = MathF.Abs(JulianPower) < 1.0f ? 1.0f : JulianPower;
+            var absPower = MathF.Max(MathF.Abs(power), 1.0f);
+            var branch = MathF.Floor(NextUnit(random) * absPower);
+            var angle = (MathF.Atan2(point.Y, point.X) + (2.0f * MathF.PI * branch)) / power;
+            var radius = MathF.Pow(MathF.Max(MathF.Sqrt(radiusSquared), 0.000001f), JulianDist / power);
+            result += new Vector2(MathF.Cos(angle), MathF.Sin(angle)) * (Julian * radius);
+        }
+
+        if (GaussianBlur != 0.0f)
+        {
+            var amount = GaussianBlur * (NextUnit(random) + NextUnit(random) + NextUnit(random) + NextUnit(random) - 2.0f);
+            var angle = NextUnit(random) * 2.0f * MathF.PI;
+            result += new Vector2(MathF.Cos(angle), MathF.Sin(angle)) * amount;
+        }
+
         return result;
+    }
+
+    private static float NextUnit(IFractalRandom? random)
+    {
+        return random is null ? 0.5f : (float)random.NextDouble();
     }
 }
 
@@ -42,10 +85,15 @@ public readonly record struct FractalFlameTransform2D(
 {
     public Vector2 Apply(Vector2 point)
     {
+        return Apply(point, random: null);
+    }
+
+    public Vector2 Apply(Vector2 point, IFractalRandom? random)
+    {
         var affine = new Vector2(
             (Matrix.X * point.X) + (Matrix.Y * point.Y) + Translation.X,
             (Matrix.Z * point.X) + (Matrix.W * point.Y) + Translation.Y);
-        return Variations.HasAny ? Variations.Apply(affine) : affine;
+        return Variations.HasAny ? Variations.Apply(affine, random) : affine;
     }
 }
 
@@ -81,4 +129,3 @@ public sealed class FractalFlameDefinition
 
     public IReadOnlyList<FractalFlameTransform2D> Transforms { get; }
 }
-

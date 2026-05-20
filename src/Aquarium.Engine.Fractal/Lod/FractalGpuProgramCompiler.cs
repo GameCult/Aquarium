@@ -64,8 +64,8 @@ public static class FractalGpuProgramCompiler
         return new AquariumPackedFractalIfsTransform(
             transform.Matrix,
             new Vector4(transform.Translation, transform.Variations.Linear, transform.Variations.Spherical),
-            new Vector4(transform.Variations.Bubble, MathF.Max(transform.Weight, 0.0f), transform.Color, StableUnit(transform.Name, (int)(transform.Color * 4096.0f))),
-            Vector4.Zero);
+            new Vector4(transform.Variations.Bubble, MathF.Max(transform.Weight, 0.0f), transform.Color, transform.Variations.JulianDist),
+            new Vector4(transform.Variations.Disc, transform.Variations.Julian, transform.Variations.JulianPower, transform.Variations.GaussianBlur));
     }
 
     private static AquariumPackedFractalIfsTransform Pack(

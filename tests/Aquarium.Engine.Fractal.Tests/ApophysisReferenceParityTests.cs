@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Numerics;
 using System.Xml.Linq;
 using Aquarium.Engine.Fractal.Grammar;
+using Aquarium.Engine.Fractal.Lod;
 
 namespace Aquarium.Engine.Fractal.Tests;
 
@@ -104,6 +105,43 @@ public sealed class ApophysisReferenceParityTests
         Assert.Equal(8192, histogram.HitCount);
         Assert.InRange(occupied, 450, 540);
         Assert.Equal(0xAEB1C81Bu, checksum);
+    }
+
+    [Fact]
+    public void FlameParserReadsJWildfireVariationGroupSubset()
+    {
+        var root = FindRepoRoot();
+        var flamePath = Path.Combine(root, "tests", "Aquarium.Engine.Fractal.Tests", "Fixtures", "JWildfire", "julian-disc-minimal.flame");
+
+        var flame = FractalFlameFileParser.ParseFirst(File.ReadAllText(flamePath), seed: 91);
+
+        Assert.Equal("julian-disc-minimal", flame.Name);
+        Assert.Equal(2, flame.Transforms.Count);
+        Assert.Equal(new Vector4(1.0f, 0.0f, 0.0f, 1.0f), flame.Transforms[0].Matrix);
+        Assert.Equal(new Vector2(-0.1f, 0.2f), flame.Transforms[0].Translation);
+        Assert.Equal(1.0f, flame.Transforms[0].Variations.Linear);
+        Assert.Equal(0.5f, flame.Transforms[0].Variations.Julian);
+        Assert.Equal(5.0f, flame.Transforms[0].Variations.JulianPower);
+        Assert.Equal(1.25f, flame.Transforms[0].Variations.JulianDist);
+        Assert.Equal(0.02f, flame.Transforms[0].Variations.GaussianBlur);
+        Assert.Equal(new Vector4(0.25f, 0.75f, -0.75f, 0.25f), flame.Transforms[1].Matrix);
+        Assert.Equal(0.8f, flame.Transforms[1].Variations.Disc);
+    }
+
+    [Fact]
+    public void JWildfireVariationSubsetFeedsGpuProgramRows()
+    {
+        var root = FindRepoRoot();
+        var flamePath = Path.Combine(root, "tests", "Aquarium.Engine.Fractal.Tests", "Fixtures", "JWildfire", "julian-disc-minimal.flame");
+        var flame = FractalFlameFileParser.ParseFirst(File.ReadAllText(flamePath), seed: 91);
+
+        var rows = FractalGpuProgramCompiler.CompileFlame2D(flame, maxTransformCount: 8);
+
+        Assert.Equal(2, rows.Length);
+        Assert.Equal(0.5f, rows[0].TileAddress.Y);
+        Assert.Equal(5.0f, rows[0].TileAddress.Z);
+        Assert.Equal(0.02f, rows[0].TileAddress.W);
+        Assert.Equal(0.8f, rows[1].TileAddress.X);
     }
 
     [Fact]

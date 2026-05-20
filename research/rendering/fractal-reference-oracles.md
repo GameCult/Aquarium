@@ -129,6 +129,63 @@ Apophysis-style minimal XML rather than full JWildfire `variationGroup` flame
 XML. Do not "fix" that by making the fixture bigger until the parser and DSL
 contract deliberately support the richer reference dialect.
 
+## JWildfire Selftest Faceplant
+
+Running JWildfire's bundled `selftest.flame` through Aquarium is the correct
+kind of embarrassing:
+
+```powershell
+.\scripts\fractal-splat-receipt.ps1 `
+  -ProgramFlame artifacts\reference-tools\j-wildfire-9.00\lib\FARenderJWF\selftest.flame `
+  -Splats 2000000 `
+  -SplatUpdates 50000 `
+  -Warmup 0 `
+  -Frames 1 `
+  -Depth 64 `
+  -ReservoirUpdates 15000 `
+  -ReadbackSplats 250000 `
+  -VisualParity `
+  -VisualParityReferenceSamples 1000000 `
+  -HistogramSize 256x256 `
+  -HistogramBounds '-128,-128,128,128'
+```
+
+First receipt after adding the JWildfire `variationGroup`/coefficient-layout
+slice and the `disc`, `julian`, and `gaussian_blur` variation subset:
+
+- GPU time: `66.446 ms/frame`, `15.0 FPS` equivalent
+- visual score: `5.01%`
+- occupancy overlap: `3.04%`
+- L1 distance: `1.899840`
+- artifact:
+  `artifacts/fractal-jwildfire-faceplant/jwildfire-vs-aquarium-expanded.png`
+
+The first unexpanded run scored `0.00%` and rendered a single dot. The expanded
+run produces a recognizable central flame knot, but it still does not match the
+reference. This is not just "more variations needed." It exposes three distinct
+gaps:
+
+1. **DSL expressiveness.** A serious flame dialect needs named variation
+   nodes, parameters, post transforms, palette/color semantics, xaos/chaos
+   weights, and optional weighting fields. The current Aquarium flame subset is
+   a compact test dialect, not a full JWildfire import surface.
+2. **Translation quality.** JWildfire's coefficient layout differs from the
+   older Apophysis-style fixtures. `variationGroup` can hide the real variation
+   list from the xform attributes. Rich dialect import needs a translation
+   report that says exactly which fields were accepted, approximated, ignored,
+   or rejected.
+3. **Hot-path shape.** Brute replaying 64 flame iterations per splat in one
+   compute invocation is too slow. Rich flame rendering should store continuing
+   iteration state in GPU reservoirs and advance it stochastically across
+   frames, then density-estimate/shade from those resident samples. The reservoir
+   is the renderer, not an expensive reset button.
+
+The next coherent slice is therefore not "add 200 variations." It is an
+import/lowering contract: parse a richer flame AST, produce an explicit
+translation report, lower supported variation nodes into compact GPU op rows,
+and carry persistent per-sample iteration state so zoom/movement can reuse
+sample history instead of starting every splat from zero.
+
 ## GPU Flame Receipt
 
 The flame fixture can now drive the D3D12 reservoir receipt directly:

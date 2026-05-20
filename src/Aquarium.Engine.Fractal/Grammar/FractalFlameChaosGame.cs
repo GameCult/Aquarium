@@ -25,7 +25,7 @@ public static class FractalFlameChaosGame
 
         for (var step = 0; step < burnIn + count; step++)
         {
-            point = SelectTransform(definition.Transforms, total, (float)random.NextDouble()).Apply(point);
+            point = SelectTransform(definition.Transforms, total, (float)random.NextDouble()).Apply(point, random);
             if (step >= burnIn)
             {
                 points[step - burnIn] = point;
@@ -54,4 +54,3 @@ public static class FractalFlameChaosGame
         return transforms[^1];
     }
 }
-

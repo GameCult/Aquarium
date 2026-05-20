@@ -149,9 +149,41 @@ float3 FractalPoint(uint index, out float radius)
             float2 t = transform.radiiRotationFalloff.xy;
             float2 affine = float2((m.x * p.x) + (m.y * p.y) + t.x, (m.z * p.x) + (m.w * p.y) + t.y);
             float r2 = dot(affine, affine);
+            float r = sqrt(max(r2, 0.0));
+            float theta = atan2(affine.y, affine.x);
             float2 nextPoint = affine * transform.radiiRotationFalloff.z;
             nextPoint += affine * (transform.radiiRotationFalloff.w / max(r2, 0.000001));
             nextPoint += affine * (transform.materialSeedShape.x * 4.0 / (r2 + 4.0));
+            float disc = transform.tileAddress.x;
+            if (disc != 0.0)
+            {
+                float discTheta = disc * theta / 3.14159265358979323846;
+                nextPoint += float2(sin(3.14159265358979323846 * r), cos(3.14159265358979323846 * r)) * discTheta;
+            }
+
+            float julian = transform.tileAddress.y;
+            if (julian != 0.0)
+            {
+                float power = abs(transform.tileAddress.z) < 1.0 ? 1.0 : transform.tileAddress.z;
+                float absPower = max(abs(power), 1.0);
+                float branch = floor(Random01(n + depth * 2246822519u + 97u) * absPower);
+                float angle = (theta + 6.28318530717958647692 * branch) / power;
+                float radial = pow(max(r, 0.000001), transform.materialSeedShape.w / power);
+                nextPoint += julian * radial * float2(cos(angle), sin(angle));
+            }
+
+            float blur = transform.tileAddress.w;
+            if (blur != 0.0)
+            {
+                float blurRadius = blur * (
+                    Random01(n + depth * 3266489917u + 11u) +
+                    Random01(n + depth * 3266489917u + 23u) +
+                    Random01(n + depth * 3266489917u + 37u) +
+                    Random01(n + depth * 3266489917u + 53u) - 2.0);
+                float blurAngle = Random01(n + depth * 668265263u + 71u) * 6.28318530717958647692;
+                nextPoint += blurRadius * float2(cos(blurAngle), sin(blurAngle));
+            }
+
             p = nextPoint;
             material = transform.materialSeedShape.z;
             support *= saturate(max(length(m.xy), length(m.zw)));
