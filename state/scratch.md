@@ -51,6 +51,9 @@ The renderer work that matters next:
   GPU splat histograms against the CPU flame oracle. Current score plateaus
   near 84.2% distribution parity / 0.9955 cosine, so the next architectural
   need is visual-error feedback, not more raw sampling theater.
+  Use `-VisualParityView name:minX,minY,maxX,maxY` for camera-window truth.
+  The depth-16 flame receipt loses hard under zoom: micro -0.25..0.25 is 82.05%
+  with 2,656 starved reference bins. This is the next real reservoir target.
 - Use `docs/zyphos-eusocial-sync.md` before evolving Zyphos world content.
   Eusocial Interbeing owns canon in `E:\Projects\Eusocial Interbeing`; Zyphos
   owns render constraints and feeds design questions back through the vault's

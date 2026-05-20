@@ -56,12 +56,17 @@ Console.WriteLine($"readback checksum: 0x{receipt.ReadbackChecksum:X16}");
 if (receipt.VisualParity is not null)
 {
     Console.WriteLine($"visual parity samples: {receipt.VisualParity.ComparedSamples:N0}/{receipt.VisualParity.ReferenceSamples:N0}");
+    Console.WriteLine($"visual parity views: {receipt.VisualParity.Views.Count:N0}");
     Console.WriteLine($"visual parity bins: {receipt.VisualParity.Width}x{receipt.VisualParity.Height}");
     Console.WriteLine($"visual parity occupancy overlap: {receipt.VisualParity.OccupancyOverlapPercent:0.00}%");
     Console.WriteLine($"visual parity distribution score: {receipt.VisualParity.DistributionScorePercent:0.00}%");
     Console.WriteLine($"visual parity l1 distance: {receipt.VisualParity.L1Distance:0.000000}");
     Console.WriteLine($"visual parity rmse: {receipt.VisualParity.Rmse:0.000000}");
     Console.WriteLine($"visual parity cosine: {receipt.VisualParity.CosineSimilarity:0.000000}");
+    foreach (var view in receipt.VisualParity.Views)
+    {
+        Console.WriteLine($"visual view {view.Name}: score {view.DistributionScorePercent:0.00}% / hits gpu {view.GpuHitCount:N0}, ref {view.ReferenceHitCount:N0} / starved bins {view.StarvedReferenceBins:N0} / under-mass {view.UnderrepresentedMassPercent:0.00}%");
+    }
 }
 Console.WriteLine($"receipt: {receiptPath}");
 
@@ -438,12 +443,6 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
             options.VisualParityReferenceSamples,
             options.HistogramBurnIn,
             new FractalXorShiftRandom(options.Seed));
-        var referenceHistogram = FractalPointHistogramBuilder.Build(
-            referencePoints,
-            options.HistogramWidth,
-            options.HistogramHeight,
-            options.HistogramBounds);
-
         var points = new Vector2[readbackSplatCount];
         var splats = (AquariumPackedFractalSdfSplat3D*)readback.Map<byte>(0);
         for (var index = 0; index < points.Length; index++)
@@ -453,29 +452,67 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
         }
 
         readback.Unmap(0);
-        var gpuHistogram = FractalPointHistogramBuilder.Build(
-            points,
-            options.HistogramWidth,
-            options.HistogramHeight,
-            options.HistogramBounds);
-        var metrics = CompareHistograms(referenceHistogram, gpuHistogram);
+        var views = options.VisualParityViews.Count > 0
+            ? options.VisualParityViews
+            : [new VisualParityView("global", options.HistogramBounds)];
+        var viewReceipts = new VisualParityViewReceipt[views.Count];
+        for (var index = 0; index < views.Count; index++)
+        {
+            viewReceipts[index] = BuildVisualParityView(
+                views[index],
+                referencePoints,
+                points,
+                options.HistogramWidth,
+                options.HistogramHeight);
+        }
+
+        var primary = viewReceipts[0];
         return new VisualParityReceipt(
             readbackSplatCount,
             options.VisualParityReferenceSamples,
             options.HistogramWidth,
             options.HistogramHeight,
+            primary.Bounds,
+            primary.ReferenceHitCount,
+            primary.GpuHitCount,
+            primary.ReferenceOccupiedBins,
+            primary.GpuOccupiedBins,
+            primary.SharedOccupiedBins,
+            primary.OccupancyOverlapPercent,
+            primary.L1Distance,
+            primary.Rmse,
+            primary.CosineSimilarity,
+            primary.DistributionScorePercent,
+            viewReceipts);
+    }
+
+    private static VisualParityViewReceipt BuildVisualParityView(
+        VisualParityView view,
+        IReadOnlyList<Vector2> referencePoints,
+        IReadOnlyList<Vector2> gpuPoints,
+        int width,
+        int height)
+    {
+        var referenceHistogram = FractalPointHistogramBuilder.Build(referencePoints, width, height, view.Bounds);
+        var gpuHistogram = FractalPointHistogramBuilder.Build(gpuPoints, width, height, view.Bounds);
+        var metrics = CompareHistograms(referenceHistogram, gpuHistogram);
+        return new VisualParityViewReceipt(
+            view.Name,
             [
-                options.HistogramBounds.X,
-                options.HistogramBounds.Y,
-                options.HistogramBounds.Z,
-                options.HistogramBounds.W,
+                view.Bounds.X,
+                view.Bounds.Y,
+                view.Bounds.Z,
+                view.Bounds.W,
             ],
             referenceHistogram.HitCount,
             gpuHistogram.HitCount,
             metrics.ReferenceOccupiedBins,
             metrics.GpuOccupiedBins,
             metrics.SharedOccupiedBins,
+            metrics.StarvedReferenceBins,
             metrics.OccupancyOverlapPercent,
+            metrics.UnderrepresentedMassPercent,
+            metrics.OversampledMassPercent,
             metrics.L1Distance,
             metrics.Rmse,
             metrics.CosineSimilarity,
@@ -499,12 +536,17 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
         var referenceOccupied = 0;
         var candidateOccupied = 0;
         var sharedOccupied = 0;
+        var starvedReferenceBins = 0;
+        var underrepresentedMass = 0.0;
+        var oversampledMass = 0.0;
         for (var index = 0; index < reference.Bins.Length; index++)
         {
             var referenceProbability = reference.Bins[index] / (double)referenceTotal;
             var candidateProbability = candidate.Bins[index] / (double)candidateTotal;
             var delta = referenceProbability - candidateProbability;
             l1 += Math.Abs(delta);
+            underrepresentedMass += Math.Max(delta, 0.0);
+            oversampledMass += Math.Max(-delta, 0.0);
             squared += delta * delta;
             dot += referenceProbability * candidateProbability;
             referenceMagnitude += referenceProbability * referenceProbability;
@@ -514,6 +556,7 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
             referenceOccupied += referenceHas ? 1 : 0;
             candidateOccupied += candidateHas ? 1 : 0;
             sharedOccupied += referenceHas && candidateHas ? 1 : 0;
+            starvedReferenceBins += referenceHas && !candidateHas ? 1 : 0;
         }
 
         var occupiedUnion = Math.Max(referenceOccupied + candidateOccupied - sharedOccupied, 1);
@@ -523,7 +566,10 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
             referenceOccupied,
             candidateOccupied,
             sharedOccupied,
+            starvedReferenceBins,
             sharedOccupied * 100.0 / occupiedUnion,
+            underrepresentedMass * 100.0,
+            oversampledMass * 100.0,
             l1,
             rmse,
             cosine,
@@ -619,7 +665,8 @@ internal sealed record ReceiptOptions(
     int HistogramHeight,
     Vector4 HistogramBounds,
     bool VisualParity,
-    int VisualParityReferenceSamples)
+    int VisualParityReferenceSamples,
+    IReadOnlyList<VisualParityView> VisualParityViews)
 {
     public static ReceiptOptions Parse(string[] args)
     {
@@ -646,7 +693,8 @@ internal sealed record ReceiptOptions(
             64,
             new Vector4(-8.0f, -8.0f, 8.0f, 8.0f),
             false,
-            1_000_000);
+            1_000_000,
+            []);
         for (var index = 0; index < args.Length; index++)
         {
             var arg = args[index];
@@ -674,6 +722,7 @@ internal sealed record ReceiptOptions(
                 "--histogram-bounds" => ParseHistogramBounds(options, Next()),
                 "--visual-parity" => options with { VisualParity = true },
                 "--visual-parity-reference-samples" => options with { VisualParityReferenceSamples = int.Parse(Next()) },
+                "--visual-parity-view" => AddVisualParityView(options, Next()),
                 _ => throw new ArgumentException($"Unknown receipt option: {arg}"),
             };
         }
@@ -745,20 +794,35 @@ internal sealed record ReceiptOptions(
 
     private static ReceiptOptions ParseHistogramBounds(ReceiptOptions options, string value)
     {
+        return options with { HistogramBounds = ParseBounds(value, "Histogram bounds") };
+    }
+
+    private static ReceiptOptions AddVisualParityView(ReceiptOptions options, string value)
+    {
+        var separator = value.IndexOf(':', StringComparison.Ordinal);
+        if (separator <= 0 || separator == value.Length - 1)
+        {
+            throw new ArgumentException("Visual parity view must be name:minX,minY,maxX,maxY.");
+        }
+
+        var name = value[..separator];
+        var bounds = ParseBounds(value[(separator + 1)..], "Visual parity view bounds");
+        return options with { VisualParityViews = [.. options.VisualParityViews, new VisualParityView(name, bounds)] };
+    }
+
+    private static Vector4 ParseBounds(string value, string label)
+    {
         var parts = value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         if (parts.Length != 4)
         {
-            throw new ArgumentException("Histogram bounds must be minX,minY,maxX,maxY.");
+            throw new ArgumentException($"{label} must be minX,minY,maxX,maxY.");
         }
 
-        return options with
-        {
-            HistogramBounds = new Vector4(
-                float.Parse(parts[0], System.Globalization.CultureInfo.InvariantCulture),
-                float.Parse(parts[1], System.Globalization.CultureInfo.InvariantCulture),
-                float.Parse(parts[2], System.Globalization.CultureInfo.InvariantCulture),
-                float.Parse(parts[3], System.Globalization.CultureInfo.InvariantCulture)),
-        };
+        return new Vector4(
+            float.Parse(parts[0], System.Globalization.CultureInfo.InvariantCulture),
+            float.Parse(parts[1], System.Globalization.CultureInfo.InvariantCulture),
+            float.Parse(parts[2], System.Globalization.CultureInfo.InvariantCulture),
+            float.Parse(parts[3], System.Globalization.CultureInfo.InvariantCulture));
     }
 
     private static uint ParseUInt32(string value)
@@ -792,6 +856,8 @@ internal sealed record ReferencePpmReceipt(
     ulong RgbChecksum,
     ulong LuminanceChecksum);
 
+internal readonly record struct VisualParityView(string Name, Vector4 Bounds);
+
 internal sealed record VisualParityReceipt(
     int ComparedSamples,
     int ReferenceSamples,
@@ -807,13 +873,34 @@ internal sealed record VisualParityReceipt(
     double L1Distance,
     double Rmse,
     double CosineSimilarity,
+    double DistributionScorePercent,
+    IReadOnlyList<VisualParityViewReceipt> Views);
+
+internal sealed record VisualParityViewReceipt(
+    string Name,
+    float[] Bounds,
+    int ReferenceHitCount,
+    int GpuHitCount,
+    int ReferenceOccupiedBins,
+    int GpuOccupiedBins,
+    int SharedOccupiedBins,
+    int StarvedReferenceBins,
+    double OccupancyOverlapPercent,
+    double UnderrepresentedMassPercent,
+    double OversampledMassPercent,
+    double L1Distance,
+    double Rmse,
+    double CosineSimilarity,
     double DistributionScorePercent);
 
 internal readonly record struct HistogramComparison(
     int ReferenceOccupiedBins,
     int GpuOccupiedBins,
     int SharedOccupiedBins,
+    int StarvedReferenceBins,
     double OccupancyOverlapPercent,
+    double UnderrepresentedMassPercent,
+    double OversampledMassPercent,
     double L1Distance,
     double Rmse,
     double CosineSimilarity,

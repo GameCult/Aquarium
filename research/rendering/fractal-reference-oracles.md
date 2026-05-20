@@ -150,6 +150,47 @@ the current flame path initializes resident splats from the program and then
 performs stochastic replacement; it does not yet use visual error feedback,
 MIS/ReSTIR weights, or an external rendered-image residual to steer updates.
 
+## View-Conditioned Parity
+
+Global parity is a weak metric. Realtime usefulness depends on the current
+camera window: panning or zooming should keep the visible image smooth while the
+cache spends new work on underrepresented regions.
+
+The receipt tool therefore accepts named viewport bounds:
+
+```powershell
+.\scripts\fractal-splat-receipt.ps1 `
+  -Splats 2000000 `
+  -SplatUpdates 50000 `
+  -Warmup 10 `
+  -Frames 60 `
+  -Depth 16 `
+  -ReservoirUpdates 15000 `
+  -ProgramFlame tests\Aquarium.Engine.Fractal.Tests\Fixtures\Apophysis\linear-spherical-bubble.flame `
+  -ReadbackSplats 250000 `
+  -VisualParity `
+  -VisualParityReferenceSamples 1000000 `
+  -HistogramSize 128x128 `
+  -VisualParityView global:-8,-8,8,8 `
+  -VisualParityView mid:-1,-1,1,1 `
+  -VisualParityView close:-0.5,-0.5,0.5,0.5 `
+  -VisualParityView micro:-0.25,-0.25,0.25,0.25
+```
+
+First view-conditioned receipt:
+
+| View | Distribution score | GPU hits | Reference hits | Starved bins | Underrepresented mass |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| global | 97.09% | 249,972 | 999,836 | 1,034 | 2.91% |
+| mid | 91.93% | 166,654 | 667,105 | 1,792 | 8.07% |
+| close | 88.97% | 125,448 | 501,033 | 2,266 | 11.03% |
+| micro | 82.05% | 71,348 | 284,011 | 2,656 | 17.95% |
+
+This is the first metric that catches the real problem. The reservoir is fast,
+but it is not yet view-adaptive. It needs camera-conditioned target weights,
+underrepresented-bin feedback, and temporal reuse validation before it deserves
+claims about maintaining flame quality during movement and zoom.
+
 ## Sources
 
 - Apophysis 7x repository: https://github.com/wanily/apophysis7x

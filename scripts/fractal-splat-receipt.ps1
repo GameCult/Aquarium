@@ -12,6 +12,7 @@ param(
     [int]$VisualParityReferenceSamples = 1000000,
     [string]$HistogramSize = "64x64",
     [string]$HistogramBounds = "-8,-8,8,8",
+    [string[]]$VisualParityView = @(),
     [int]$ReadbackSplats = 64
 )
 
@@ -31,6 +32,9 @@ if ($VisualParity) {
         "--histogram-size", $HistogramSize,
         "--histogram-bounds", $HistogramBounds
     )
+    foreach ($view in $VisualParityView) {
+        $parityArgs += @("--visual-parity-view", $view)
+    }
 }
 
 dotnet run --project (Join-Path $repoRoot "tools\Aquarium.Fractal.Receipt\Aquarium.Fractal.Receipt.csproj") -c Release -- `
