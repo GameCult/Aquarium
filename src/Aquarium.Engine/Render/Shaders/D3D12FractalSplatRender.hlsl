@@ -36,7 +36,34 @@ struct FractalSdfSplat
     float4 key;
 };
 
-StructuredBuffer<FractalSdfSplat> fractalSdfSplats : register(t25);
+struct SdfEnvelopeReservoir
+{
+    float4 centerRadius;
+    float4 radiiFalloff;
+    float4 weightTargetCount;
+    float4 validation;
+};
+
+struct PbrMaterialReservoir
+{
+    float4 baseColorRoughMetal;
+    float4 normalVariance;
+    float4 weightTargetCount;
+    float4 validation;
+};
+
+struct RadiosityReservoir
+{
+    float4 radianceDistance;
+    float4 directionOcclusion;
+    float4 weightTargetCount;
+    float4 validation;
+};
+
+StructuredBuffer<FractalSdfSplat> fractalSdfSplats : register(t38);
+StructuredBuffer<SdfEnvelopeReservoir> sdfEnvelopeReservoirs : register(t39);
+StructuredBuffer<PbrMaterialReservoir> pbrMaterialReservoirs : register(t40);
+StructuredBuffer<RadiosityReservoir> radiosityReservoirs : register(t41);
 
 struct FractalSplatVertexOut
 {
@@ -44,6 +71,8 @@ struct FractalSplatVertexOut
     nointerpolation uint splatIndex : TEXCOORD0;
     float2 quad : TEXCOORD1;
     float travel : TEXCOORD2;
+    float reservoirConfidence : TEXCOORD3;
+    float radiosityEnergy : TEXCOORD4;
 };
 
 struct SceneOut
@@ -85,17 +114,20 @@ FractalSplatVertexOut D3D12FractalSplatVS(uint vertexId : SV_VertexID, uint inst
 
     uint splatIndex = VisibleSplatIndex(instanceId);
     FractalSdfSplat splat = fractalSdfSplats[splatIndex];
+    SdfEnvelopeReservoir sdf = sdfEnvelopeReservoirs[splatIndex];
+    bool sdfResident = sdf.weightTargetCount.z > 0.5;
+    float4 centerRadius = sdfResident ? sdf.centerRadius : splat.centerRadius;
     float3 forward;
     float3 right;
     float3 up;
     cameraBasis(cameraPosition, cameraTarget, forward, right, up);
     float worldScale = max(viewRadius * 0.16, 0.05);
-    float3 center = cameraTarget + splat.centerRadius.xyz * worldScale;
+    float3 center = cameraTarget + centerRadius.xyz * worldScale;
     float3 delta = center - cameraPosition;
     float z = max(dot(delta, forward), 0.0001);
     float2 projected = float2(dot(delta, right), dot(delta, up)) / z * 1.6;
     float clipAspect = resolution.x / max(resolution.y, 1.0);
-    float boundRadius = max(splat.centerRadius.w * worldScale * 1.8, 0.002 * viewRadius);
+    float boundRadius = max(centerRadius.w * worldScale * 1.8, 0.002 * viewRadius);
     float projectedRadius = boundRadius / z * 1.6 + 0.002;
     float2 clipCenter = float2(projected.x / clipAspect, projected.y);
     float2 clipRadius = float2(projectedRadius / clipAspect, projectedRadius);
@@ -105,6 +137,8 @@ FractalSplatVertexOut D3D12FractalSplatVS(uint vertexId : SV_VertexID, uint inst
     output.splatIndex = splatIndex;
     output.quad = corners[vertexId];
     output.travel = z;
+    output.reservoirConfidence = sdfResident ? saturate(sdf.validation.x) : saturate(splat.materialConfidence.w) * 0.25;
+    output.radiosityEnergy = 0.0;
     return output;
 }
 
@@ -117,16 +151,37 @@ SceneOut D3D12FractalSplatPS(FractalSplatVertexOut input)
     }
 
     FractalSdfSplat splat = fractalSdfSplats[input.splatIndex];
-    float weight = pow(saturate(1.0 - r2), max(splat.radiiFalloff.w * 0.35, 0.5));
+    SdfEnvelopeReservoir sdf = sdfEnvelopeReservoirs[input.splatIndex];
+    PbrMaterialReservoir pbr = pbrMaterialReservoirs[input.splatIndex];
+    RadiosityReservoir radiosity = radiosityReservoirs[input.splatIndex];
+
+    bool sdfResident = sdf.weightTargetCount.z > 0.5;
+    bool pbrResident = pbr.weightTargetCount.z > 0.5;
+    bool radiosityResident = radiosity.weightTargetCount.z > 0.5;
+    float falloff = sdfResident ? sdf.radiiFalloff.w : splat.radiiFalloff.w;
+    float weight = pow(saturate(1.0 - r2), max(falloff * 0.35, 0.5));
     float material = saturate(splat.materialConfidence.x);
-    float3 color = lerp(float3(0.05, 0.42, 1.0), float3(1.0, 0.72, 0.18), material);
-    float opacity = saturate(weight * 0.34);
+    float3 fallbackColor = lerp(float3(0.05, 0.42, 1.0), float3(1.0, 0.72, 0.18), material);
+    float3 pbrColor = saturate(pbr.baseColorRoughMetal.rgb);
+    float3 radiosityColor = saturate(radiosity.radianceDistance.rgb);
+    float reservoirConfidence = min(
+        sdfResident ? saturate(sdf.validation.x) : 0.0,
+        min(
+            pbrResident ? saturate(pbr.validation.x) : 0.0,
+            radiosityResident ? saturate(radiosity.validation.x) : 0.0));
+    float3 color = pbrResident ? pbrColor : fallbackColor;
+    color += radiosityResident ? radiosityColor * (0.18 + reservoirConfidence * 0.35) : 0.0;
+    float opacity = saturate(weight * (0.18 + reservoirConfidence * 0.28));
 
     SceneOut output;
     output.colorTravel = float4(color * opacity, min(input.travel, farDistance + 1.0));
     output.metadata = float4(FIELD_ID_FRACTAL_SPLAT_BASE, normalize(float3(input.quad, 1.0)));
-    output.control = float4(opacity, saturate(splat.materialConfidence.w), saturate(splat.centerRadius.w * 40.0), 0.0);
-    output.reservoirGuide = float4(saturate(splat.materialConfidence.w), 0.0, 1.0, 0.0);
+    output.control = float4(opacity, reservoirConfidence, saturate((sdfResident ? sdf.centerRadius.w : splat.centerRadius.w) * 40.0), 0.0);
+    output.reservoirGuide = float4(
+        sdfResident ? saturate(sdf.validation.x) : 0.0,
+        pbrResident ? saturate(pbr.validation.x) : 0.0,
+        radiosityResident ? saturate(radiosity.validation.x) : 0.0,
+        reservoirConfidence);
     output.depth = saturate(input.travel / max(farDistance, 0.0001));
     return output;
 }

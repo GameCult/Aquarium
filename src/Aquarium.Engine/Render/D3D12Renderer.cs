@@ -60,6 +60,10 @@ public sealed class D3D12Renderer : IAquariumRenderer
     private const int RootTemporalGaussians = 13;
     private const int RootCurrentReservoirGuide = 14;
     private const int RootHistoryReservoirGuide = 15;
+    private const int RootFractalSplatSrv = 16;
+    private const int RootFractalSdfReservoirSrv = 17;
+    private const int RootFractalPbrReservoirSrv = 18;
+    private const int RootFractalRadiosityReservoirSrv = 19;
     private const int RootFusionFrameConstants = 0;
     private const int RootFusionSeeds = 1;
     private const int RootFusionSensorCameras = 2;
@@ -630,12 +634,6 @@ public sealed class D3D12Renderer : IAquariumRenderer
         temporalGaussianBuffer.CreateShaderResourceView(device, frameResources.TemporalGaussianDescriptor);
         frameResources.TemporalGaussianUnorderedAccessDescriptor = frameResources.TransientShaderDescriptors.Allocate();
         temporalGaussianBuffer.CreateUnorderedAccessView(device, frameResources.TemporalGaussianUnorderedAccessDescriptor);
-        if (fractalSplatBuffer is not null)
-        {
-            frameResources.FractalSplatDescriptor = frameResources.TransientShaderDescriptors.Allocate();
-            fractalSplatBuffer.CreateShaderResourceView(device, frameResources.FractalSplatDescriptor);
-        }
-
         frameResources.StudioPmremDescriptor = frameResources.TransientShaderDescriptors.Allocate();
         studioPmremTexture.CreateShaderResourceView(device, frameResources.StudioPmremDescriptor);
         frameResources.StudioIrradianceDescriptor = frameResources.TransientShaderDescriptors.Allocate();
@@ -1472,10 +1470,16 @@ public sealed class D3D12Renderer : IAquariumRenderer
                 context.CommandList.DrawInstanced(6, (uint)temporalGaussianCount, 0, 0);
             }
 
-            if (visibleFractalSplatCount > 0 && fractalSplatBuffer is not null)
+            if (visibleFractalSplatCount > 0 && fractalSplatBuffer is not null && fractalSdfReservoirBuffer is not null && fractalPbrReservoirBuffer is not null && fractalRadiosityReservoirBuffer is not null)
             {
                 fractalSplatBuffer.Transition(context.CommandList, ResourceStates.PixelShaderResource | ResourceStates.NonPixelShaderResource);
-                context.CommandList.SetGraphicsRootDescriptorTable(RootTemporalGaussians, frameResources.FractalSplatDescriptor.Gpu);
+                fractalSdfReservoirBuffer.Transition(context.CommandList, ResourceStates.PixelShaderResource | ResourceStates.NonPixelShaderResource);
+                fractalPbrReservoirBuffer.Transition(context.CommandList, ResourceStates.PixelShaderResource | ResourceStates.NonPixelShaderResource);
+                fractalRadiosityReservoirBuffer.Transition(context.CommandList, ResourceStates.PixelShaderResource | ResourceStates.NonPixelShaderResource);
+                context.CommandList.SetGraphicsRootShaderResourceView(RootFractalSplatSrv, fractalSplatBuffer.Resource.GPUVirtualAddress);
+                context.CommandList.SetGraphicsRootShaderResourceView(RootFractalSdfReservoirSrv, fractalSdfReservoirBuffer.Resource.GPUVirtualAddress);
+                context.CommandList.SetGraphicsRootShaderResourceView(RootFractalPbrReservoirSrv, fractalPbrReservoirBuffer.Resource.GPUVirtualAddress);
+                context.CommandList.SetGraphicsRootShaderResourceView(RootFractalRadiosityReservoirSrv, fractalRadiosityReservoirBuffer.Resource.GPUVirtualAddress);
                 context.CommandList.SetPipelineState(fractalSplatRenderPipelineState!);
                 context.CommandList.DrawInstanced(6, (uint)visibleFractalSplatCount, 0, 0);
             }
@@ -2463,6 +2467,10 @@ public sealed class D3D12Renderer : IAquariumRenderer
             new RootParameter(new RootDescriptorTable([temporalGaussianRange]), ShaderVisibility.All),
             new RootParameter(new RootDescriptorTable([currentReservoirGuideRange]), ShaderVisibility.Pixel),
             new RootParameter(new RootDescriptorTable([historyReservoirGuideRange]), ShaderVisibility.Pixel),
+            new RootParameter(RootParameterType.ShaderResourceView, new RootDescriptor(38, 0), ShaderVisibility.All),
+            new RootParameter(RootParameterType.ShaderResourceView, new RootDescriptor(39, 0), ShaderVisibility.All),
+            new RootParameter(RootParameterType.ShaderResourceView, new RootDescriptor(40, 0), ShaderVisibility.All),
+            new RootParameter(RootParameterType.ShaderResourceView, new RootDescriptor(41, 0), ShaderVisibility.All),
         };
         var staticSamplers = new[]
         {
@@ -2921,8 +2929,6 @@ public sealed class D3D12Renderer : IAquariumRenderer
         public D3D12DescriptorSlot TemporalGaussianDescriptor { get; set; }
 
         public D3D12DescriptorSlot TemporalGaussianUnorderedAccessDescriptor { get; set; }
-
-        public D3D12DescriptorSlot FractalSplatDescriptor { get; set; }
 
         public D3D12DescriptorSlot StudioPmremDescriptor { get; set; }
 
