@@ -44,6 +44,9 @@ The renderer work that matters next:
   parity. Local parser/evaluator receipts are not external renderer proof.
   `scripts/fractal-flame-reference-render.ps1` is the optional FLAM3-compatible
   PPM receipt path when a local `flam3-render` binary is installed.
+  `scripts/fractal-splat-receipt.ps1 -ProgramFlame ... -SplatUpdates 50000`
+  is the GPU-resident flame stress receipt path; it initializes resident splats
+  once and then performs budgeted stochastic updates.
 - Use `docs/zyphos-eusocial-sync.md` before evolving Zyphos world content.
   Eusocial Interbeing owns canon in `E:\Projects\Eusocial Interbeing`; Zyphos
   owns render constraints and feeds design questions back through the vault's

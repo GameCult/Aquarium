@@ -38,7 +38,8 @@ Console.WriteLine($"sdf reservoirs: {receipt.SdfReservoirCount:N0}");
 Console.WriteLine($"pbr reservoirs: {receipt.PbrReservoirCount:N0}");
 Console.WriteLine($"radiosity reservoirs: {receipt.RadiosityReservoirCount:N0}");
 Console.WriteLine($"ifs program transforms: {receipt.ProgramTransformCount:N0}");
-Console.WriteLine($"program mode: {(receipt.ProgramTransformCount > 0 ? "precomposed selected cut" : "fallback hash IFS")}");
+Console.WriteLine($"program mode: {DescribeProgramMode(receipt.ProgramMode)}");
+Console.WriteLine($"splat updates/frame: {receipt.SplatUpdatesPerFrame:N0}");
 Console.WriteLine($"candidates/pass: {receipt.CandidatesPerPass}");
 Console.WriteLine($"reservoir updates/pass/frame: {receipt.ReservoirUpdatesPerPass:N0}");
 Console.WriteLine($"reservoir full-coverage frames: {receipt.ReservoirFullCoverageFrames:0.0}");
@@ -53,6 +54,16 @@ Console.WriteLine($"gpu reservoir candidates/sec: {receipt.GpuReservoirCandidate
 Console.WriteLine($"cpu submit+wait ms/frame: {receipt.CpuSubmitAndWaitMillisecondsPerFrame:0.000}");
 Console.WriteLine($"readback checksum: 0x{receipt.ReadbackChecksum:X16}");
 Console.WriteLine($"receipt: {receiptPath}");
+
+static string DescribeProgramMode(int mode)
+{
+    return mode switch
+    {
+        1 => "precomposed selected cut",
+        2 => "flame 2D affine/variation program",
+        _ => "fallback hash IFS",
+    };
+}
 
 static void RunReferencePpmReceipt(ReceiptOptions options)
 {
@@ -170,6 +181,8 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
 
     public GpuFractalSplatReceipt Run(ReceiptOptions options)
     {
+        var resolvedProgramTransforms = BuildReceiptProgram(options);
+        var resolvedProgramMode = resolvedProgramTransforms.Length > 0 ? options.ProgramMode : 0;
         var splatStride = Marshal.SizeOf<AquariumPackedFractalSdfSplat3D>();
         var reservoirStride = Marshal.SizeOf<AquariumPackedSdfEnvelopeReservoir>();
         var framePlan = FractalGpuReservoirBudgetPlanner.Plan(
@@ -184,7 +197,7 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
         using var sdfReservoirs = CreateUavBuffer(reservoirBytes, "Aquarium Fractal Receipt SDF Reservoir Buffer");
         using var pbrReservoirs = CreateUavBuffer(reservoirBytes, "Aquarium Fractal Receipt PBR Reservoir Buffer");
         using var radiosityReservoirs = CreateUavBuffer(reservoirBytes, "Aquarium Fractal Receipt Radiosity Reservoir Buffer");
-        using var programTransforms = CreateProgramTransformBuffer(options);
+        using var programTransforms = CreateProgramTransformBuffer(resolvedProgramTransforms);
 
         var readbackSplatBytes = (ulong)Math.Min(options.ReadbackSplats, options.SplatCount) * (ulong)splatStride;
         var readbackReservoirBytes = (ulong)Math.Min(options.ReadbackSplats, options.SplatCount) * (ulong)reservoirStride;
@@ -203,14 +216,15 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
             allocator.Reset();
             commandList.Reset(allocator, splatPipelineState);
             commandList.SetComputeRootSignature(rootSignature);
-            BindConstants(options, frame);
+            BindConstants(options, frame, resolvedProgramTransforms.Length, resolvedProgramMode);
             commandList.SetComputeRootUnorderedAccessView(1, splats.GPUVirtualAddress);
             commandList.SetComputeRootUnorderedAccessView(2, sdfReservoirs.GPUVirtualAddress);
             commandList.SetComputeRootUnorderedAccessView(3, pbrReservoirs.GPUVirtualAddress);
             commandList.SetComputeRootUnorderedAccessView(4, radiosityReservoirs.GPUVirtualAddress);
             commandList.SetComputeRootShaderResourceView(5, programTransforms.GPUVirtualAddress);
             commandList.EndQuery(queryHeap, QueryType.Timestamp, 0);
-            Dispatch(splatPipelineState, options.SplatCount);
+            var splatDispatchCount = frame == 0 ? options.SplatCount : options.SplatUpdatesPerFrame;
+            Dispatch(splatPipelineState, splatDispatchCount);
             commandList.ResourceBarrier(ResourceBarrier.BarrierUnorderedAccessView(splats));
             Dispatch(sdfPipelineState, options.ReservoirUpdatesPerPass);
             Dispatch(pbrPipelineState, options.ReservoirUpdatesPerPass);
@@ -246,7 +260,7 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
         var gpuSeconds = measuredGpuTicks / (double)timestampFrequency;
         var gpuMsPerFrame = gpuSeconds * 1000.0 / Math.Max(measuredFrames, 1);
         var cpuMsPerFrame = measuredCpuTicks * 1000.0 / Stopwatch.Frequency / Math.Max(measuredFrames, 1);
-        var splatsPerSecond = options.SplatCount * (double)measuredFrames / Math.Max(gpuSeconds, 1.0e-12);
+        var splatsPerSecond = options.SplatUpdatesPerFrame * (double)measuredFrames / Math.Max(gpuSeconds, 1.0e-12);
         var reservoirCandidatesPerSecond = options.ReservoirUpdatesPerPass * 3.0 * options.CandidatesPerPass * measuredFrames / Math.Max(gpuSeconds, 1.0e-12);
 
         return new GpuFractalSplatReceipt(
@@ -255,7 +269,9 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
             options.SplatCount,
             options.SplatCount,
             options.SplatCount,
-            options.ProgramTransformCount,
+            resolvedProgramTransforms.Length,
+            resolvedProgramMode,
+            options.SplatUpdatesPerFrame,
             options.CandidatesPerPass,
             options.ReservoirUpdatesPerPass,
             framePlan.Passes[0].ExpectedFullCoverageFrames,
@@ -299,9 +315,8 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
         return resource;
     }
 
-    private ID3D12Resource CreateProgramTransformBuffer(ReceiptOptions options)
+    private ID3D12Resource CreateProgramTransformBuffer(AquariumPackedFractalIfsTransform[] transforms)
     {
-        var transforms = BuildReceiptProgram(options.ProgramTransformCount);
         var stride = Marshal.SizeOf<AquariumPackedFractalIfsTransform>();
         var bytes = (ulong)(Math.Max(transforms.Length, 1) * stride);
         var upload = device.CreateCommittedResource(HeapType.Upload, ResourceDescription.Buffer(bytes), ResourceStates.GenericRead, null);
@@ -330,7 +345,18 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
         return resource;
     }
 
-    private static AquariumPackedFractalIfsTransform[] BuildReceiptProgram(int transformCount)
+    private static AquariumPackedFractalIfsTransform[] BuildReceiptProgram(ReceiptOptions options)
+    {
+        if (options.ProgramFlamePath is not null)
+        {
+            var flame = FractalFlameFileParser.ParseFirst(File.ReadAllText(options.ProgramFlamePath), unchecked((int)options.Seed));
+            return FractalGpuProgramCompiler.CompileFlame2D(flame, Math.Max(options.ProgramTransformCount, 1));
+        }
+
+        return BuildSyntheticReceiptProgram(options.ProgramTransformCount);
+    }
+
+    private static AquariumPackedFractalIfsTransform[] BuildSyntheticReceiptProgram(int transformCount)
     {
         if (transformCount <= 0)
         {
@@ -355,7 +381,7 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
         return transforms;
     }
 
-    private void BindConstants(ReceiptOptions options, int frame)
+    private void BindConstants(ReceiptOptions options, int frame, int programTransformCount, int programMode)
     {
         commandList.SetComputeRoot32BitConstant(0, (uint)options.SplatCount, 0);
         commandList.SetComputeRoot32BitConstant(0, (uint)frame, 1);
@@ -363,8 +389,8 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
         commandList.SetComputeRoot32BitConstant(0, options.Seed, 3);
         commandList.SetComputeRoot32BitConstant(0, (uint)options.CandidatesPerPass, 4);
         commandList.SetComputeRoot32BitConstant(0, (uint)options.ReservoirUpdatesPerPass, 5);
-        commandList.SetComputeRoot32BitConstant(0, (uint)options.ProgramTransformCount, 6);
-        commandList.SetComputeRoot32BitConstant(0, options.ProgramTransformCount > 0 ? 1u : 0u, 7);
+        commandList.SetComputeRoot32BitConstant(0, (uint)programTransformCount, 6);
+        commandList.SetComputeRoot32BitConstant(0, (uint)programMode, 7);
     }
 
     private void CopyReceiptReadback(ID3D12Resource splats, ID3D12Resource sdf, ID3D12Resource pbr, ID3D12Resource radiosity, ID3D12Resource readback, ulong splatBytes, ulong reservoirBytes)
@@ -451,6 +477,7 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
 
 internal sealed record ReceiptOptions(
     int SplatCount,
+    int SplatUpdatesPerFrame,
     int WarmupFrames,
     int MeasuredFrames,
     int Depth,
@@ -458,11 +485,13 @@ internal sealed record ReceiptOptions(
     int CandidatesPerPass,
     int ReservoirUpdatesPerPass,
     int ProgramTransformCount,
+    int ProgramMode,
     int ReadbackSplats,
     string ShaderPath,
     string OutputDirectory,
     string? FlamePath,
     string? ReferencePpmPath,
+    string? ProgramFlamePath,
     int HistogramSamples,
     int HistogramBurnIn,
     int HistogramWidth,
@@ -473,6 +502,7 @@ internal sealed record ReceiptOptions(
     {
         var options = new ReceiptOptions(
             2_000_000,
+            2_000_000,
             30,
             120,
             8,
@@ -480,9 +510,11 @@ internal sealed record ReceiptOptions(
             2,
             50_000,
             0,
+            0,
             64,
             Path.Combine("src", "Aquarium.Engine", "Render", "Shaders", "D3D12FractalReservoirCompute.hlsl"),
             Path.Combine("artifacts", "fractal-splat-receipts"),
+            null,
             null,
             null,
             8192,
@@ -497,13 +529,15 @@ internal sealed record ReceiptOptions(
             options = arg switch
             {
                 "--splats" => options with { SplatCount = int.Parse(Next()) },
+                "--splat-updates" => options with { SplatUpdatesPerFrame = int.Parse(Next()) },
                 "--warmup" => options with { WarmupFrames = int.Parse(Next()) },
                 "--frames" => options with { MeasuredFrames = int.Parse(Next()) },
                 "--depth" => options with { Depth = int.Parse(Next()) },
                 "--seed" => options with { Seed = ParseUInt32(Next()) },
                 "--candidates" => options with { CandidatesPerPass = int.Parse(Next()) },
                 "--reservoir-updates" => options with { ReservoirUpdatesPerPass = int.Parse(Next()) },
-                "--program-transforms" => options with { ProgramTransformCount = int.Parse(Next()) },
+                "--program-transforms" => options with { ProgramTransformCount = int.Parse(Next()), ProgramMode = 1 },
+                "--program-flame" => options with { ProgramFlamePath = Next(), ProgramMode = 2 },
                 "--readback-splats" => options with { ReadbackSplats = int.Parse(Next()) },
                 "--shader" => options with { ShaderPath = Next() },
                 "--out" => options with { OutputDirectory = Next() },
@@ -542,14 +576,26 @@ internal sealed record ReceiptOptions(
             return options;
         }
 
+        if (options.ProgramFlamePath is not null && !File.Exists(options.ProgramFlamePath))
+        {
+            throw new FileNotFoundException("Receipt program flame file was not found.", options.ProgramFlamePath);
+        }
+
+        options = options.ProgramFlamePath is not null && options.ProgramTransformCount <= 0
+            ? options with { ProgramTransformCount = int.MaxValue, ProgramMode = 2 }
+            : options;
+        options = options.ProgramMode == 0 && options.ProgramTransformCount > 0
+            ? options with { ProgramMode = 1 }
+            : options;
+
         if (!File.Exists(options.ShaderPath))
         {
             throw new FileNotFoundException("Receipt shader file was not found.", options.ShaderPath);
         }
 
-        if (options.SplatCount <= 0 || options.WarmupFrames < 0 || options.MeasuredFrames <= 0 || options.Depth <= 0 || options.CandidatesPerPass <= 0 || options.ReservoirUpdatesPerPass <= 0 || options.ReservoirUpdatesPerPass > options.SplatCount || options.ProgramTransformCount < 0 || options.ReadbackSplats < 0)
+        if (options.SplatCount <= 0 || options.SplatUpdatesPerFrame <= 0 || options.SplatUpdatesPerFrame > options.SplatCount || options.WarmupFrames < 0 || options.MeasuredFrames <= 0 || options.Depth <= 0 || options.CandidatesPerPass <= 0 || options.ReservoirUpdatesPerPass <= 0 || options.ReservoirUpdatesPerPass > options.SplatCount || options.ProgramTransformCount < 0 || options.ProgramMode < 0 || options.ProgramMode > 2 || options.ReadbackSplats < 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(args), "Splats, frames, depth, candidates, and reservoir updates must be positive; reservoir updates must not exceed splats; program transforms, warmup, and readback must not be negative.");
+            throw new ArgumentOutOfRangeException(nameof(args), "Splats, splat updates, frames, depth, candidates, and reservoir updates must be positive; splat/reservoir updates must not exceed splats; program transforms, warmup, and readback must not be negative.");
         }
         return options;
     }
@@ -621,6 +667,8 @@ internal sealed record GpuFractalSplatReceipt(
     int PbrReservoirCount,
     int RadiosityReservoirCount,
     int ProgramTransformCount,
+    int ProgramMode,
+    int SplatUpdatesPerFrame,
     int CandidatesPerPass,
     int ReservoirUpdatesPerPass,
     double ReservoirFullCoverageFrames,

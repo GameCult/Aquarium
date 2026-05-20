@@ -5,6 +5,22 @@ namespace Aquarium.Engine.Fractal.Lod;
 
 public static class FractalGpuProgramCompiler
 {
+    public static AquariumPackedFractalIfsTransform[] CompileFlame2D(
+        FractalFlameDefinition flame,
+        int maxTransformCount)
+    {
+        ArgumentNullException.ThrowIfNull(flame);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxTransformCount);
+
+        var transforms = new AquariumPackedFractalIfsTransform[Math.Min(maxTransformCount, flame.Transforms.Count)];
+        for (var index = 0; index < transforms.Length; index++)
+        {
+            transforms[index] = PackFlame(flame.Transforms[index]);
+        }
+
+        return transforms;
+    }
+
     public static AquariumPackedFractalIfsTransform[] CompileSelectedTree(
         FractalOwnershipTree tree,
         IReadOnlyList<AquariumSelectedCut> selectedCut,
@@ -41,6 +57,15 @@ public static class FractalGpuProgramCompiler
         }
 
         return transforms.ToArray();
+    }
+
+    private static AquariumPackedFractalIfsTransform PackFlame(FractalFlameTransform2D transform)
+    {
+        return new AquariumPackedFractalIfsTransform(
+            transform.Matrix,
+            new Vector4(transform.Translation, transform.Variations.Linear, transform.Variations.Spherical),
+            new Vector4(transform.Variations.Bubble, MathF.Max(transform.Weight, 0.0f), transform.Color, StableUnit(transform.Name, (int)(transform.Color * 4096.0f))),
+            Vector4.Zero);
     }
 
     private static AquariumPackedFractalIfsTransform Pack(

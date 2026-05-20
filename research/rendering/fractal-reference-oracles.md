@@ -44,8 +44,10 @@ This is not full flame parity. It is the first ruler on the desk.
    `flam3-render` is available, Aquarium renders the fixture to binary PPM and
    records image-shape, non-black pixel count, RGB checksum, and luminance
    checksum under `artifacts/fractal-flame-reference`.
-4. Lower proven flame definitions into GPU program rows. Only then should the
-   live reservoir renderer use them as visual test scenes.
+4. DONE: lower proven flame definitions into GPU program rows for the receipt
+   shader's `flame 2D affine/variation program` mode.
+5. Use those rows as a visual test scene only through GPU-resident reservoirs,
+   not by restoring a CPU direct renderer.
 
 ## Local Receipt
 
@@ -85,6 +87,32 @@ quality scale. Aquarium then hashes the PPM through
 This is the first external renderer receipt. It proves the fixture can be
 rendered by the reference family and gives Aquarium a stable image artifact to
 compare as the local flame subset grows.
+
+## GPU Flame Receipt
+
+The flame fixture can now drive the D3D12 reservoir receipt directly:
+
+```powershell
+.\scripts\fractal-splat-receipt.ps1 `
+  -Splats 2000000 `
+  -SplatUpdates 50000 `
+  -Warmup 10 `
+  -Frames 60 `
+  -Depth 8 `
+  -ReservoirUpdates 15000 `
+  -ProgramFlame tests\Aquarium.Engine.Fractal.Tests\Fixtures\Apophysis\linear-spherical-bubble.flame
+```
+
+Local GTX 1070 receipt from 2026-05-20:
+
+- resident splats: `2,000,000`
+- resident reservoir rows: `2,000,000` each for SDF, PBR, and radiosity
+- program transforms: `3`
+- splat updates/frame: `50,000`
+- reservoir updates/pass/frame: `15,000`
+- GPU time: `1.030 ms/frame`
+- equivalent FPS: `971.3`
+- readback checksum: `0x2647D8B08575B848`
 
 ## Sources
 

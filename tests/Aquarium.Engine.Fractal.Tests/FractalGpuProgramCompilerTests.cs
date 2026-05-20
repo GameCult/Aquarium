@@ -51,4 +51,34 @@ public sealed class FractalGpuProgramCompilerTests
 
         Assert.Equal(5, transforms.Length);
     }
+
+    [Fact]
+    public void CompilesFlameTransformsIntoPackedGpuProgramRows()
+    {
+        var root = FindRepoRoot();
+        var flamePath = Path.Combine(root, "tests", "Aquarium.Engine.Fractal.Tests", "Fixtures", "Apophysis", "linear-spherical-bubble.flame");
+        var flame = FractalFlameFileParser.ParseFirst(File.ReadAllText(flamePath), seed: 77);
+
+        var transforms = FractalGpuProgramCompiler.CompileFlame2D(flame, maxTransformCount: 2);
+
+        Assert.Equal(2, transforms.Length);
+        Assert.Equal(flame.Transforms[0].Matrix, transforms[0].OffsetScaleAmplitude);
+        Assert.Equal(flame.Transforms[0].Translation.X, transforms[0].RadiiRotationFalloff.X);
+        Assert.Equal(flame.Transforms[0].Translation.Y, transforms[0].RadiiRotationFalloff.Y);
+        Assert.Equal(flame.Transforms[0].Variations.Linear, transforms[0].RadiiRotationFalloff.Z);
+        Assert.Equal(flame.Transforms[1].Variations.Spherical, transforms[1].RadiiRotationFalloff.W);
+        Assert.Equal(flame.Transforms[1].Weight, transforms[1].MaterialSeedShape.Y);
+        Assert.Equal(flame.Transforms[1].Color, transforms[1].MaterialSeedShape.Z);
+    }
+
+    private static string FindRepoRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "Aquarium.Engine.sln")))
+        {
+            directory = directory.Parent;
+        }
+
+        return directory?.FullName ?? throw new InvalidOperationException("Could not find Aquarium repo root.");
+    }
 }

@@ -114,6 +114,54 @@ float3 CubeSphereDirection(float face, float2 uv)
 
 float3 FractalPoint(uint index, out float radius)
 {
+    if (ProgramTransformCount > 0u && ProgramMode == 2u)
+    {
+        uint n = Hash(index ^ Seed);
+        float2 p = 0.0;
+        float material = 0.0;
+        float support = 1.0;
+        float totalWeight = 0.0;
+        [loop]
+        for (uint weightIndex = 0u; weightIndex < ProgramTransformCount; weightIndex++)
+        {
+            totalWeight += max(ProgramTransforms[weightIndex].materialSeedShape.y, 0.0);
+        }
+
+        [loop]
+        for (uint depth = 0; depth < Depth; depth++)
+        {
+            float target = Random01(n + depth * 747796405u + FrameIndex * 1664525u) * max(totalWeight, 0.000001);
+            float cumulative = 0.0;
+            uint transformIndex = ProgramTransformCount - 1u;
+            [loop]
+            for (uint candidateIndex = 0u; candidateIndex < ProgramTransformCount; candidateIndex++)
+            {
+                cumulative += max(ProgramTransforms[candidateIndex].materialSeedShape.y, 0.0);
+                if (target <= cumulative)
+                {
+                    transformIndex = candidateIndex;
+                    break;
+                }
+            }
+
+            FractalIfsTransform transform = ProgramTransforms[transformIndex];
+            float4 m = transform.offsetScaleAmplitude;
+            float2 t = transform.radiiRotationFalloff.xy;
+            float2 affine = float2((m.x * p.x) + (m.y * p.y) + t.x, (m.z * p.x) + (m.w * p.y) + t.y);
+            float r2 = dot(affine, affine);
+            float2 nextPoint = affine * transform.radiiRotationFalloff.z;
+            nextPoint += affine * (transform.radiiRotationFalloff.w / max(r2, 0.000001));
+            nextPoint += affine * (transform.materialSeedShape.x * 4.0 / (r2 + 4.0));
+            p = nextPoint;
+            material = transform.materialSeedShape.z;
+            support *= saturate(max(length(m.xy), length(m.zw)));
+            n = Hash(n + asuint(transform.materialSeedShape.w) + transformIndex + depth);
+        }
+
+        radius = max(0.0025 * max(support, 0.04), 0.00015);
+        return float3(p, material * 0.08);
+    }
+
     if (ProgramTransformCount > 0u && ProgramMode == 1u)
     {
         uint h = Hash(index ^ Seed);
@@ -213,10 +261,16 @@ float4 ReservoirStats(uint index, uint passKind, float baseTarget, out uint sele
 [numthreads(256, 1, 1)]
 void D3D12FractalSplatReceiptCS(uint3 id : SV_DispatchThreadID)
 {
-    uint index = id.x;
-    if (index >= SplatCount)
+    uint updateIndex = id.x;
+    if (updateIndex >= SplatCount)
     {
         return;
+    }
+
+    uint index = updateIndex;
+    if (ProgramMode == 2u && FrameIndex > 0u)
+    {
+        index = ReservoirIndex(updateIndex, 4u);
     }
 
     float radius;
