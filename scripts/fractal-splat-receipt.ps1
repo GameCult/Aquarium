@@ -5,6 +5,7 @@ param(
     [int]$Depth = 8,
     [int]$Candidates = 2,
     [int]$ReservoirUpdates = 50000,
+    [int]$ProgramTransforms = 0,
     [int]$ReadbackSplats = 64
 )
 
@@ -17,4 +18,5 @@ dotnet run --project (Join-Path $repoRoot "tools\Aquarium.Fractal.Receipt\Aquari
     --depth $Depth `
     --candidates $Candidates `
     --reservoir-updates $ReservoirUpdates `
+    --program-transforms $ProgramTransforms `
     --readback-splats $ReadbackSplats

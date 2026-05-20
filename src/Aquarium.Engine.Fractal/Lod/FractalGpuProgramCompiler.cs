@@ -57,7 +57,7 @@ public static class FractalGpuProgramCompiler
             new Vector4(claim.Center, radius, claim.Amplitude),
             new Vector4(claim.Radii, claim.RotationRadians, claim.Falloff),
             new Vector4(material, claim.Seed, claim.ShapePower, (float)claim.PayloadKind),
-            domain);
+            new Vector4(MathF.Cos(claim.RotationRadians), MathF.Sin(claim.RotationRadians), domain.X, domain.Y));
     }
 
     private static float StableUnit(string tags, int seed)

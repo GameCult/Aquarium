@@ -36,7 +36,7 @@ struct FractalIfsTransform
     float4 offsetScaleAmplitude;
     float4 radiiRotationFalloff;
     float4 materialSeedShape;
-    float4 domain;
+    float4 rotationDomain;
 };
 
 cbuffer ReceiptConstants : register(b0)
@@ -87,9 +87,8 @@ float3 FractalPoint(uint index, out float radius)
         {
             uint transformIndex = Hash(n + depth * 747796405u) % ProgramTransformCount;
             FractalIfsTransform transform = ProgramTransforms[transformIndex];
-            float angle = transform.radiiRotationFalloff.z;
-            float c = cos(angle);
-            float s = sin(angle);
+            float c = transform.rotationDomain.x;
+            float s = transform.rotationDomain.y;
             float2 rotated = float2((p.x * c) - (p.y * s), (p.x * s) + (p.y * c));
             float childScale = saturate(transform.offsetScaleAmplitude.z);
             p = rotated * max(childScale, 0.01) + transform.offsetScaleAmplitude.xy;
