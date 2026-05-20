@@ -8,6 +8,10 @@ param(
     [int]$ReservoirUpdates = 50000,
     [int]$ProgramTransforms = 0,
     [string]$ProgramFlame = "",
+    [switch]$VisualParity,
+    [int]$VisualParityReferenceSamples = 1000000,
+    [string]$HistogramSize = "64x64",
+    [string]$HistogramBounds = "-8,-8,8,8",
     [int]$ReadbackSplats = 64
 )
 
@@ -19,6 +23,16 @@ if (-not [string]::IsNullOrWhiteSpace($ProgramFlame)) {
     $programArgs = @("--program-flame", $programFlamePath)
 }
 
+$parityArgs = @()
+if ($VisualParity) {
+    $parityArgs = @(
+        "--visual-parity",
+        "--visual-parity-reference-samples", "$VisualParityReferenceSamples",
+        "--histogram-size", $HistogramSize,
+        "--histogram-bounds", $HistogramBounds
+    )
+}
+
 dotnet run --project (Join-Path $repoRoot "tools\Aquarium.Fractal.Receipt\Aquarium.Fractal.Receipt.csproj") -c Release -- `
     --splats $Splats `
     --splat-updates $SplatUpdates `
@@ -28,4 +42,5 @@ dotnet run --project (Join-Path $repoRoot "tools\Aquarium.Fractal.Receipt\Aquari
     --candidates $Candidates `
     --reservoir-updates $ReservoirUpdates `
     $programArgs `
+    $parityArgs `
     --readback-splats $ReadbackSplats

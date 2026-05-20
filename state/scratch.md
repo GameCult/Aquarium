@@ -47,6 +47,10 @@ The renderer work that matters next:
   `scripts/fractal-splat-receipt.ps1 -ProgramFlame ... -SplatUpdates 50000`
   is the GPU-resident flame stress receipt path; it initializes resident splats
   once and then performs budgeted stochastic updates.
+  Add `-VisualParity -ReadbackSplats 250000 -HistogramSize 128x128` to score
+  GPU splat histograms against the CPU flame oracle. Current score plateaus
+  near 84.2% distribution parity / 0.9955 cosine, so the next architectural
+  need is visual-error feedback, not more raw sampling theater.
 - Use `docs/zyphos-eusocial-sync.md` before evolving Zyphos world content.
   Eusocial Interbeing owns canon in `E:\Projects\Eusocial Interbeing`; Zyphos
   owns render constraints and feeds design questions back through the vault's

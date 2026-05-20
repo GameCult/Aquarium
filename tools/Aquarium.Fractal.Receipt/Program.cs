@@ -53,6 +53,16 @@ Console.WriteLine($"gpu splats/sec: {receipt.GpuSplatsPerSecond:N0}");
 Console.WriteLine($"gpu reservoir candidates/sec: {receipt.GpuReservoirCandidatesPerSecond:N0}");
 Console.WriteLine($"cpu submit+wait ms/frame: {receipt.CpuSubmitAndWaitMillisecondsPerFrame:0.000}");
 Console.WriteLine($"readback checksum: 0x{receipt.ReadbackChecksum:X16}");
+if (receipt.VisualParity is not null)
+{
+    Console.WriteLine($"visual parity samples: {receipt.VisualParity.ComparedSamples:N0}/{receipt.VisualParity.ReferenceSamples:N0}");
+    Console.WriteLine($"visual parity bins: {receipt.VisualParity.Width}x{receipt.VisualParity.Height}");
+    Console.WriteLine($"visual parity occupancy overlap: {receipt.VisualParity.OccupancyOverlapPercent:0.00}%");
+    Console.WriteLine($"visual parity distribution score: {receipt.VisualParity.DistributionScorePercent:0.00}%");
+    Console.WriteLine($"visual parity l1 distance: {receipt.VisualParity.L1Distance:0.000000}");
+    Console.WriteLine($"visual parity rmse: {receipt.VisualParity.Rmse:0.000000}");
+    Console.WriteLine($"visual parity cosine: {receipt.VisualParity.CosineSimilarity:0.000000}");
+}
 Console.WriteLine($"receipt: {receiptPath}");
 
 static string DescribeProgramMode(int mode)
@@ -257,6 +267,7 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
         }
 
         var checksum = totalReadbackBytes == 0 ? 0UL : Checksum(readback, (int)totalReadbackBytes);
+        var visualParity = totalReadbackBytes == 0 ? null : BuildVisualParity(options, readback, splatStride, (int)(readbackSplatBytes / (ulong)splatStride));
         var gpuSeconds = measuredGpuTicks / (double)timestampFrequency;
         var gpuMsPerFrame = gpuSeconds * 1000.0 / Math.Max(measuredFrames, 1);
         var cpuMsPerFrame = measuredCpuTicks * 1000.0 / Stopwatch.Frequency / Math.Max(measuredFrames, 1);
@@ -283,7 +294,8 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
             splatsPerSecond,
             reservoirCandidatesPerSecond,
             cpuMsPerFrame,
-            checksum);
+            checksum,
+            visualParity);
 
         void Dispatch(ID3D12PipelineState state, int elementCount)
         {
@@ -409,6 +421,115 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
         commandList.ResourceBarrier(ResourceBarrier.BarrierTransition(radiosity, ResourceStates.CopySource, ResourceStates.UnorderedAccess));
     }
 
+    private static unsafe VisualParityReceipt? BuildVisualParity(
+        ReceiptOptions options,
+        ID3D12Resource readback,
+        int splatStride,
+        int readbackSplatCount)
+    {
+        if (!options.VisualParity || options.ProgramFlamePath is null || readbackSplatCount <= 0)
+        {
+            return null;
+        }
+
+        var flame = FractalFlameFileParser.ParseFirst(File.ReadAllText(options.ProgramFlamePath), unchecked((int)options.Seed));
+        var referencePoints = FractalFlameChaosGame.Generate(
+            flame,
+            options.VisualParityReferenceSamples,
+            options.HistogramBurnIn,
+            new FractalXorShiftRandom(options.Seed));
+        var referenceHistogram = FractalPointHistogramBuilder.Build(
+            referencePoints,
+            options.HistogramWidth,
+            options.HistogramHeight,
+            options.HistogramBounds);
+
+        var points = new Vector2[readbackSplatCount];
+        var splats = (AquariumPackedFractalSdfSplat3D*)readback.Map<byte>(0);
+        for (var index = 0; index < points.Length; index++)
+        {
+            var center = splats[index].CenterRadius;
+            points[index] = new Vector2(center.X, center.Y);
+        }
+
+        readback.Unmap(0);
+        var gpuHistogram = FractalPointHistogramBuilder.Build(
+            points,
+            options.HistogramWidth,
+            options.HistogramHeight,
+            options.HistogramBounds);
+        var metrics = CompareHistograms(referenceHistogram, gpuHistogram);
+        return new VisualParityReceipt(
+            readbackSplatCount,
+            options.VisualParityReferenceSamples,
+            options.HistogramWidth,
+            options.HistogramHeight,
+            [
+                options.HistogramBounds.X,
+                options.HistogramBounds.Y,
+                options.HistogramBounds.Z,
+                options.HistogramBounds.W,
+            ],
+            referenceHistogram.HitCount,
+            gpuHistogram.HitCount,
+            metrics.ReferenceOccupiedBins,
+            metrics.GpuOccupiedBins,
+            metrics.SharedOccupiedBins,
+            metrics.OccupancyOverlapPercent,
+            metrics.L1Distance,
+            metrics.Rmse,
+            metrics.CosineSimilarity,
+            metrics.DistributionScorePercent);
+    }
+
+    private static HistogramComparison CompareHistograms(FractalPointHistogram reference, FractalPointHistogram candidate)
+    {
+        if (reference.Width != candidate.Width || reference.Height != candidate.Height)
+        {
+            throw new ArgumentException("Histogram dimensions must match.");
+        }
+
+        var referenceTotal = Math.Max(reference.HitCount, 1);
+        var candidateTotal = Math.Max(candidate.HitCount, 1);
+        var l1 = 0.0;
+        var squared = 0.0;
+        var dot = 0.0;
+        var referenceMagnitude = 0.0;
+        var candidateMagnitude = 0.0;
+        var referenceOccupied = 0;
+        var candidateOccupied = 0;
+        var sharedOccupied = 0;
+        for (var index = 0; index < reference.Bins.Length; index++)
+        {
+            var referenceProbability = reference.Bins[index] / (double)referenceTotal;
+            var candidateProbability = candidate.Bins[index] / (double)candidateTotal;
+            var delta = referenceProbability - candidateProbability;
+            l1 += Math.Abs(delta);
+            squared += delta * delta;
+            dot += referenceProbability * candidateProbability;
+            referenceMagnitude += referenceProbability * referenceProbability;
+            candidateMagnitude += candidateProbability * candidateProbability;
+            var referenceHas = reference.Bins[index] > 0;
+            var candidateHas = candidate.Bins[index] > 0;
+            referenceOccupied += referenceHas ? 1 : 0;
+            candidateOccupied += candidateHas ? 1 : 0;
+            sharedOccupied += referenceHas && candidateHas ? 1 : 0;
+        }
+
+        var occupiedUnion = Math.Max(referenceOccupied + candidateOccupied - sharedOccupied, 1);
+        var cosine = dot / Math.Max(Math.Sqrt(referenceMagnitude * candidateMagnitude), 1.0e-12);
+        var rmse = Math.Sqrt(squared / reference.Bins.Length);
+        return new HistogramComparison(
+            referenceOccupied,
+            candidateOccupied,
+            sharedOccupied,
+            sharedOccupied * 100.0 / occupiedUnion,
+            l1,
+            rmse,
+            cosine,
+            Math.Max(0.0, (1.0 - (l1 * 0.5)) * 100.0));
+    }
+
     private void WaitForGpu()
     {
         fenceValue++;
@@ -496,7 +617,9 @@ internal sealed record ReceiptOptions(
     int HistogramBurnIn,
     int HistogramWidth,
     int HistogramHeight,
-    Vector4 HistogramBounds)
+    Vector4 HistogramBounds,
+    bool VisualParity,
+    int VisualParityReferenceSamples)
 {
     public static ReceiptOptions Parse(string[] args)
     {
@@ -521,7 +644,9 @@ internal sealed record ReceiptOptions(
             64,
             64,
             64,
-            new Vector4(-8.0f, -8.0f, 8.0f, 8.0f));
+            new Vector4(-8.0f, -8.0f, 8.0f, 8.0f),
+            false,
+            1_000_000);
         for (var index = 0; index < args.Length; index++)
         {
             var arg = args[index];
@@ -547,6 +672,8 @@ internal sealed record ReceiptOptions(
                 "--histogram-burn-in" => options with { HistogramBurnIn = int.Parse(Next()) },
                 "--histogram-size" => ParseHistogramSize(options, Next()),
                 "--histogram-bounds" => ParseHistogramBounds(options, Next()),
+                "--visual-parity" => options with { VisualParity = true },
+                "--visual-parity-reference-samples" => options with { VisualParityReferenceSamples = int.Parse(Next()) },
                 _ => throw new ArgumentException($"Unknown receipt option: {arg}"),
             };
         }
@@ -593,7 +720,12 @@ internal sealed record ReceiptOptions(
             throw new FileNotFoundException("Receipt shader file was not found.", options.ShaderPath);
         }
 
-        if (options.SplatCount <= 0 || options.SplatUpdatesPerFrame <= 0 || options.SplatUpdatesPerFrame > options.SplatCount || options.WarmupFrames < 0 || options.MeasuredFrames <= 0 || options.Depth <= 0 || options.CandidatesPerPass <= 0 || options.ReservoirUpdatesPerPass <= 0 || options.ReservoirUpdatesPerPass > options.SplatCount || options.ProgramTransformCount < 0 || options.ProgramMode < 0 || options.ProgramMode > 2 || options.ReadbackSplats < 0)
+        if (options.VisualParity && options.ProgramFlamePath is null)
+        {
+            throw new ArgumentException("Visual parity requires --program-flame so the GPU distribution has a CPU flame oracle.");
+        }
+
+        if (options.SplatCount <= 0 || options.SplatUpdatesPerFrame <= 0 || options.SplatUpdatesPerFrame > options.SplatCount || options.WarmupFrames < 0 || options.MeasuredFrames <= 0 || options.Depth <= 0 || options.CandidatesPerPass <= 0 || options.ReservoirUpdatesPerPass <= 0 || options.ReservoirUpdatesPerPass > options.SplatCount || options.ProgramTransformCount < 0 || options.ProgramMode < 0 || options.ProgramMode > 2 || options.ReadbackSplats < 0 || options.VisualParityReferenceSamples <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(args), "Splats, splat updates, frames, depth, candidates, and reservoir updates must be positive; splat/reservoir updates must not exceed splats; program transforms, warmup, and readback must not be negative.");
         }
@@ -660,6 +792,33 @@ internal sealed record ReferencePpmReceipt(
     ulong RgbChecksum,
     ulong LuminanceChecksum);
 
+internal sealed record VisualParityReceipt(
+    int ComparedSamples,
+    int ReferenceSamples,
+    int Width,
+    int Height,
+    float[] Bounds,
+    int ReferenceHitCount,
+    int GpuHitCount,
+    int ReferenceOccupiedBins,
+    int GpuOccupiedBins,
+    int SharedOccupiedBins,
+    double OccupancyOverlapPercent,
+    double L1Distance,
+    double Rmse,
+    double CosineSimilarity,
+    double DistributionScorePercent);
+
+internal readonly record struct HistogramComparison(
+    int ReferenceOccupiedBins,
+    int GpuOccupiedBins,
+    int SharedOccupiedBins,
+    double OccupancyOverlapPercent,
+    double L1Distance,
+    double Rmse,
+    double CosineSimilarity,
+    double DistributionScorePercent);
+
 internal sealed record GpuFractalSplatReceipt(
     string Adapter,
     int SplatCount,
@@ -680,4 +839,5 @@ internal sealed record GpuFractalSplatReceipt(
     double GpuSplatsPerSecond,
     double GpuReservoirCandidatesPerSecond,
     double CpuSubmitAndWaitMillisecondsPerFrame,
-    ulong ReadbackChecksum);
+    ulong ReadbackChecksum,
+    VisualParityReceipt? VisualParity);

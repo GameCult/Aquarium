@@ -114,6 +114,42 @@ Local GTX 1070 receipt from 2026-05-20:
 - equivalent FPS: `971.3`
 - readback checksum: `0x2647D8B08575B848`
 
+## Visual Parity Receipt
+
+The receipt tool can compare GPU flame splat positions against the local CPU
+flame oracle:
+
+```powershell
+.\scripts\fractal-splat-receipt.ps1 `
+  -Splats 2000000 `
+  -SplatUpdates 50000 `
+  -Warmup 0 `
+  -Frames 20 `
+  -Depth 8 `
+  -ReservoirUpdates 15000 `
+  -ProgramFlame tests\Aquarium.Engine.Fractal.Tests\Fixtures\Apophysis\linear-spherical-bubble.flame `
+  -ReadbackSplats 250000 `
+  -VisualParity `
+  -VisualParityReferenceSamples 1000000 `
+  -HistogramSize 128x128 `
+  -HistogramBounds -8,-8,8,8
+```
+
+First local scores, GPU 250k readback samples against 1M CPU reference samples:
+
+| Frames | GPU ms/frame | Distribution score | L1 distance | RMSE | Cosine |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 15.645 | 84.05% | 0.319072 | 0.000090 | 0.995365 |
+| 5 | 4.017 | 84.10% | 0.318042 | 0.000089 | 0.995402 |
+| 20 | 1.738 | 84.20% | 0.316019 | 0.000088 | 0.995591 |
+| 60 + 10 warmup | 0.952 | 84.24% | 0.315136 | 0.000088 | 0.995505 |
+
+This proves the current GPU flame program has high distribution similarity, but
+it does **not** prove learned reservoir convergence. The score plateaus because
+the current flame path initializes resident splats from the program and then
+performs stochastic replacement; it does not yet use visual error feedback,
+MIS/ReSTIR weights, or an external rendered-image residual to steer updates.
+
 ## Sources
 
 - Apophysis 7x repository: https://github.com/wanily/apophysis7x
