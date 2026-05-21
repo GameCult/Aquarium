@@ -462,7 +462,7 @@ ResolveOut D3D12ResolvePS(VertexOut input)
     }
     else if (renderDebugMode >= 11.5 && renderDebugMode < 12.5)
     {
-        finalColor = float3(currentReservoirConfidence, currentTemporalDetail, combinedHistoryWeight);
+        finalColor = float3(currentReservoirConfidence, saturate(reservoirSampleAge / MAX_HISTORY_AGE), currentReservoirDomainValidity);
     }
     ResolveOut output;
     output.finalColor = float4(finalColor, 1.0);
