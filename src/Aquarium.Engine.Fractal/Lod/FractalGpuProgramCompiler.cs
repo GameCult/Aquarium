@@ -89,7 +89,20 @@ public static class FractalGpuProgramCompiler
             new Vector4(material, claim.Seed, rotationCos, rotationSin),
             tileAddress,
             new Vector4(1.0f, 0.0f, 0.0f, 1.0f),
-            Vector4.Zero);
+            new Vector4(0.0f, 0.0f, (float)EncodingFor(claim.PayloadKind), 0.0f));
+    }
+
+    private static AquariumFieldEncoding EncodingFor(AquariumFractalPayloadKind payloadKind)
+    {
+        return payloadKind switch
+        {
+            AquariumFractalPayloadKind.Height => AquariumFieldEncoding.Height,
+            AquariumFractalPayloadKind.SignedDistance => AquariumFieldEncoding.SignedDistance,
+            AquariumFractalPayloadKind.Density => AquariumFieldEncoding.Density,
+            AquariumFractalPayloadKind.Extinction => AquariumFieldEncoding.Extinction,
+            AquariumFractalPayloadKind.Material => AquariumFieldEncoding.Material,
+            _ => throw new ArgumentOutOfRangeException(nameof(payloadKind), payloadKind, "Unknown fractal payload kind."),
+        };
     }
 
     private static float StableUnit(string tags, int seed)

@@ -140,10 +140,11 @@ float3 CubeSphereDirection(float face, float2 uv)
     return normalize(float3(uv.x, uv.y, 1.0));
 }
 
-float3 FractalPoint(uint index, out float radius)
+float3 FractalPoint(uint index, out float radius, out float fieldEncoding)
 {
     if (ProgramTransformCount > 0u && ProgramMode == 2u)
     {
+        fieldEncoding = FIELD_ENCODING_DENSITY;
         FlameIterationState state = FlameStates[index];
         uint n = asuint(state.randomStep.x);
         float step = state.randomStep.y;
@@ -244,6 +245,7 @@ float3 FractalPoint(uint index, out float radius)
         uint h = Hash(index ^ Seed);
         uint transformIndex = h % ProgramTransformCount;
         FractalIfsTransform transform = ProgramTransforms[transformIndex];
+        fieldEncoding = transform.postTranslation.z;
         float rx = Random01(h + FrameIndex * 17u) * 2.0 - 1.0;
         float ry = Random01(h + 7919u) * 2.0 - 1.0;
         float c = transform.materialSeedShape.z;
@@ -266,6 +268,7 @@ float3 FractalPoint(uint index, out float radius)
         float z = 0.0;
         float scale = 1.0;
         float material = 0.0;
+        fieldEncoding = FIELD_ENCODING_SIGNED_DISTANCE;
         radius = 0.01;
         [loop]
         for (uint depth = 0; depth < Depth; depth++)
@@ -290,6 +293,7 @@ float3 FractalPoint(uint index, out float radius)
     uint n = index ^ Seed;
     float3 p = 0.0;
     float scale = 1.0;
+    fieldEncoding = FIELD_ENCODING_SIGNED_DISTANCE;
     [loop]
     for (uint depth = 0; depth < Depth; depth++)
     {
@@ -356,9 +360,9 @@ void D3D12FractalSplatReceiptCS(uint3 id : SV_DispatchThreadID)
     }
 
     float radius;
-    float3 p = FractalPoint(index, radius);
+    float fieldEncoding;
+    float3 p = FractalPoint(index, radius, fieldEncoding);
     uint h = Hash(index + FrameIndex * 1664525u + Seed);
-    float fieldEncoding = ProgramMode == 2u ? FIELD_ENCODING_DENSITY : FIELD_ENCODING_SIGNED_DISTANCE;
     FractalSdfSplat splat;
     splat.centerRadius = float4(p, radius);
     splat.orientation = float4(0.0, 0.0, 0.0, 1.0);

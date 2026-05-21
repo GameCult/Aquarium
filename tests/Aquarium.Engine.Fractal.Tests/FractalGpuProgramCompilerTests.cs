@@ -37,6 +37,25 @@ public sealed class FractalGpuProgramCompilerTests
     }
 
     [Fact]
+    public void CompilesFieldPayloadEncodingIntoGpuTransformRows()
+    {
+        const string source = """
+            tile PositiveZ 0 0 0 zyphos/field
+            height ridge 0 0 3 3 0 4 1 0.2 17 ridge
+            density smoke 1 1 2 2 0 4 1 0.8 19 smoke
+            extinction ash -1 -1 2 2 0 4 1 0.4 23 ash
+            """;
+        var tree = FractalDslCompiler.Compile(source);
+        var selected = FractalSelectedCutBuilder.Build(FractalSummaryBuilder.Build(tree), _ => 8.0f, 64.0f);
+
+        var transforms = FractalGpuProgramCompiler.CompileSelectedTree(tree, selected, maxTransformCount: 8);
+
+        Assert.Contains(transforms, transform => transform.PostTranslation.Z == (float)AquariumFieldEncoding.Height);
+        Assert.Contains(transforms, transform => transform.PostTranslation.Z == (float)AquariumFieldEncoding.Density);
+        Assert.Contains(transforms, transform => transform.PostTranslation.Z == (float)AquariumFieldEncoding.Extinction);
+    }
+
+    [Fact]
     public void HonorsTransformBudget()
     {
         const string source = """
