@@ -1,11 +1,12 @@
-# Aquarium Engine
+# Fensalir
 
 <p align="center">
-  <img src="Aquarium-Engine-Icon.png" alt="Aquarium Engine icon" width="260" />
+  <img src="Fensalir-Icon.png" alt="Fensalir icon" width="160" />
 </p>
 
-C# native runtime for Aquarium clients: windowing, D3D12 rendering, input,
-reload, persistent state, debug UI, and packageable engine machinery.
+Fensalir is the C# native rendering spine for Aquarium clients: windowing,
+D3D12 rendering, input, reload, persistent state, debug UI, and packageable
+engine machinery.
 
 Epiphany is the first serious client in this repo. It is not the engine's
 identity.

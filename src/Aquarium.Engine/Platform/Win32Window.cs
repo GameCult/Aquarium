@@ -27,11 +27,13 @@ public sealed class Win32Window : IDisposable
     private const uint WM_SETICON = 0x0080;
     private const nuint ICON_SMALL = 0;
     private const nuint ICON_BIG = 1;
+    private const uint IMAGE_BITMAP = 0;
     private const uint IMAGE_ICON = 1;
     private const uint LR_LOADFROMFILE = 0x00000010;
+    private const uint LR_CREATEDIBSECTION = 0x00002000;
+    private const uint SRCCOPY = 0x00CC0020;
     private const int ICON_SIZE_LARGE = 32;
     private const int ICON_SIZE_SMALL = 16;
-    private const int ICON_SIZE_SPLASH = 192;
     private const int IDC_ARROW = 32512;
     private const int TRANSPARENT = 1;
     private const int FW_THIN = 100;
@@ -78,7 +80,9 @@ public sealed class Win32Window : IDisposable
     private readonly InputState input;
     private readonly IntPtr largeIcon;
     private readonly IntPtr smallIcon;
-    private readonly IntPtr splashIcon;
+    private readonly IntPtr splashBitmap;
+    private readonly int splashBitmapWidth;
+    private readonly int splashBitmapHeight;
     private bool disposed;
 
     private Win32Window(
@@ -90,7 +94,9 @@ public sealed class Win32Window : IDisposable
         int height,
         IntPtr largeIcon,
         IntPtr smallIcon,
-        IntPtr splashIcon)
+        IntPtr splashBitmap,
+        int splashBitmapWidth,
+        int splashBitmapHeight)
     {
         Handle = handle;
         this.className = className;
@@ -98,7 +104,9 @@ public sealed class Win32Window : IDisposable
         this.input = input;
         this.largeIcon = largeIcon;
         this.smallIcon = smallIcon;
-        this.splashIcon = splashIcon;
+        this.splashBitmap = splashBitmap;
+        this.splashBitmapWidth = splashBitmapWidth;
+        this.splashBitmapHeight = splashBitmapHeight;
         ClientWidth = width;
         ClientHeight = height;
     }
@@ -109,13 +117,20 @@ public sealed class Win32Window : IDisposable
 
     public int ClientHeight { get; private set; }
 
-    public static Win32Window Create(string title, int width, int height, InputState input, string? iconPath = null, bool visible = true)
+    public static Win32Window Create(
+        string title,
+        int width,
+        int height,
+        InputState input,
+        string? iconPath = null,
+        string? splashBitmapPath = null,
+        bool visible = true)
     {
         var className = $"AquariumEngineWindow-{Guid.NewGuid():N}";
         var instance = GetModuleHandle(null);
         var largeIcon = LoadIconFromPath(iconPath, ICON_SIZE_LARGE);
         var smallIcon = LoadIconFromPath(iconPath, ICON_SIZE_SMALL);
-        var splashIcon = LoadIconFromPath(iconPath, ICON_SIZE_SPLASH);
+        var splashBitmap = LoadSplashBitmapFromPath(splashBitmapPath, out var splashBitmapWidth, out var splashBitmapHeight);
         var classNamePointer = Marshal.StringToHGlobalUni(className);
         var titlePointer = Marshal.StringToHGlobalUni(title);
         WndProc? windowProcedure = null;
@@ -239,7 +254,18 @@ public sealed class Win32Window : IDisposable
 
             SetWindowText(handle, title);
 
-            return new Win32Window(handle, className, windowProcedure, input, width, height, largeIcon, smallIcon, splashIcon);
+            return new Win32Window(
+                handle,
+                className,
+                windowProcedure,
+                input,
+                width,
+                height,
+                largeIcon,
+                smallIcon,
+                splashBitmap,
+                splashBitmapWidth,
+                splashBitmapHeight);
         }
         finally
         {
@@ -248,7 +274,7 @@ public sealed class Win32Window : IDisposable
         }
     }
 
-    public void PaintSplash(string header = "Aquarium", string message = "Preparing Aquarium")
+    public void PaintSplash(string header = "Fensalir", string message = "Preparing runtime")
     {
         if (!GetClientRect(Handle, out var rect))
         {
@@ -266,15 +292,13 @@ public sealed class Win32Window : IDisposable
 
         try
         {
-            PaintDiagonalGradient(deviceContext, ClientWidth, ClientHeight);
-
-            if (splashIcon != IntPtr.Zero)
+            if (splashBitmap != IntPtr.Zero)
             {
-                var iconSize = Math.Min(ICON_SIZE_SPLASH, Math.Max(96, Math.Min(ClientWidth, ClientHeight) / 3));
-                var iconX = (ClientWidth - iconSize) / 2;
-                var textAnchorY = (int)MathF.Round(ClientHeight * (2.0f / 3.0f));
-                var iconY = Math.Max(24, textAnchorY - iconSize - 84);
-                DrawIconEx(deviceContext, iconX, iconY, splashIcon, iconSize, iconSize, 0, IntPtr.Zero, 0x0003);
+                PaintSplashBitmap(deviceContext, ClientWidth, ClientHeight);
+            }
+            else
+            {
+                PaintDiagonalGradient(deviceContext, ClientWidth, ClientHeight);
             }
 
             PaintSplashText(deviceContext, ClientWidth, ClientHeight, header, message);
@@ -332,9 +356,9 @@ public sealed class Win32Window : IDisposable
             DestroyIcon(smallIcon);
         }
 
-        if (splashIcon != IntPtr.Zero)
+        if (splashBitmap != IntPtr.Zero)
         {
-            DestroyIcon(splashIcon);
+            DeleteObject(splashBitmap);
         }
 
         GC.SuppressFinalize(this);
@@ -394,6 +418,60 @@ public sealed class Win32Window : IDisposable
         }
     }
 
+    private void PaintSplashBitmap(IntPtr deviceContext, int width, int height)
+    {
+        var memoryDeviceContext = CreateCompatibleDC(deviceContext);
+        if (memoryDeviceContext == IntPtr.Zero)
+        {
+            PaintDiagonalGradient(deviceContext, width, height);
+            return;
+        }
+
+        var oldBitmap = SelectObject(memoryDeviceContext, splashBitmap);
+        try
+        {
+            var sourceX = 0;
+            var sourceY = 0;
+            var sourceWidth = splashBitmapWidth;
+            var sourceHeight = splashBitmapHeight;
+            var sourceAspect = splashBitmapWidth / Math.Max(1.0f, splashBitmapHeight);
+            var targetAspect = width / Math.Max(1.0f, height);
+
+            if (sourceAspect > targetAspect)
+            {
+                sourceWidth = Math.Max(1, (int)MathF.Round(splashBitmapHeight * targetAspect));
+                sourceX = Math.Max(0, (splashBitmapWidth - sourceWidth) / 2);
+            }
+            else if (sourceAspect < targetAspect)
+            {
+                sourceHeight = Math.Max(1, (int)MathF.Round(splashBitmapWidth / targetAspect));
+                sourceY = Math.Max(0, (splashBitmapHeight - sourceHeight) / 2);
+            }
+
+            StretchBlt(
+                deviceContext,
+                0,
+                0,
+                width,
+                height,
+                memoryDeviceContext,
+                sourceX,
+                sourceY,
+                sourceWidth,
+                sourceHeight,
+                SRCCOPY);
+        }
+        finally
+        {
+            if (oldBitmap != IntPtr.Zero)
+            {
+                SelectObject(memoryDeviceContext, oldBitmap);
+            }
+
+            DeleteDC(memoryDeviceContext);
+        }
+    }
+
     private static void PaintSplashText(IntPtr deviceContext, int width, int height, string header, string message)
     {
         LoadPrivateSplashFont("Montserrat[wght].ttf");
@@ -406,7 +484,7 @@ public sealed class Win32Window : IDisposable
 
         try
         {
-            var anchorY = (int)MathF.Round(height * (2.0f / 3.0f));
+            var anchorY = Math.Clamp((int)MathF.Round(height * 0.84f), 120, Math.Max(120, height - 56));
             var headerText = header.ToUpperInvariant();
             var headerRect = new RECT
             {
@@ -498,6 +576,32 @@ public sealed class Win32Window : IDisposable
         return LoadImage(IntPtr.Zero, iconPath, IMAGE_ICON, size, size, LR_LOADFROMFILE);
     }
 
+    private static IntPtr LoadSplashBitmapFromPath(string? bitmapPath, out int width, out int height)
+    {
+        width = 0;
+        height = 0;
+        if (string.IsNullOrWhiteSpace(bitmapPath) || !File.Exists(bitmapPath))
+        {
+            return IntPtr.Zero;
+        }
+
+        var bitmap = LoadImage(IntPtr.Zero, bitmapPath, IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE | LR_CREATEDIBSECTION);
+        if (bitmap == IntPtr.Zero)
+        {
+            return IntPtr.Zero;
+        }
+
+        if (GetObject(bitmap, Marshal.SizeOf<BITMAP>(), out var bitmapInfo) == 0)
+        {
+            DeleteObject(bitmap);
+            return IntPtr.Zero;
+        }
+
+        width = Math.Max(1, bitmapInfo.bmWidth);
+        height = Math.Max(1, bitmapInfo.bmHeight);
+        return bitmap;
+    }
+
     [DllImport("kernel32.dll", EntryPoint = "GetModuleHandleW", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern IntPtr GetModuleHandle(string? moduleName);
 
@@ -537,18 +641,6 @@ public sealed class Win32Window : IDisposable
     [DllImport("user32.dll")]
     private static extern int ReleaseDC(IntPtr handle, IntPtr deviceContext);
 
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern bool DrawIconEx(
-        IntPtr deviceContext,
-        int left,
-        int top,
-        IntPtr icon,
-        int width,
-        int height,
-        uint stepIfAnimated,
-        IntPtr flickerFreeBrush,
-        uint flags);
-
     [DllImport("user32.dll")]
     private static extern IntPtr SendMessage(IntPtr handle, uint message, nuint wParam, IntPtr lParam);
 
@@ -567,6 +659,29 @@ public sealed class Win32Window : IDisposable
         ref BITMAPINFO bitmapInfo,
         uint usage,
         uint rasterOperation);
+
+    [DllImport("gdi32.dll", SetLastError = true)]
+    private static extern IntPtr CreateCompatibleDC(IntPtr deviceContext);
+
+    [DllImport("gdi32.dll", SetLastError = true)]
+    private static extern bool DeleteDC(IntPtr deviceContext);
+
+    [DllImport("gdi32.dll", SetLastError = true)]
+    private static extern bool StretchBlt(
+        IntPtr destinationDeviceContext,
+        int destinationX,
+        int destinationY,
+        int destinationWidth,
+        int destinationHeight,
+        IntPtr sourceDeviceContext,
+        int sourceX,
+        int sourceY,
+        int sourceWidth,
+        int sourceHeight,
+        uint rasterOperation);
+
+    [DllImport("gdi32.dll", EntryPoint = "GetObjectW", SetLastError = true)]
+    private static extern int GetObject(IntPtr gdiObject, int bufferSize, out BITMAP bitmap);
 
     [DllImport("gdi32.dll")]
     private static extern bool GdiFlush();
@@ -790,6 +905,18 @@ public sealed class Win32Window : IDisposable
     {
         public BITMAPINFOHEADER bmiHeader;
         public uint bmiColors;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct BITMAP
+    {
+        public int bmType;
+        public int bmWidth;
+        public int bmHeight;
+        public int bmWidthBytes;
+        public ushort bmPlanes;
+        public ushort bmBitsPixel;
+        public IntPtr bmBits;
     }
 
     [StructLayout(LayoutKind.Sequential)]

@@ -17,9 +17,10 @@ public static class AquariumHost
         var input = new InputState();
         var width = runtime.Options.Headless ? 640 : 1280;
         var height = runtime.Options.Headless ? 360 : 720;
-        var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "Aquarium-Engine-Icon.ico");
-        using var window = Win32Window.Create("Aquarium Engine", width, height, input, iconPath, visible: !runtime.Options.Headless);
-        window.PaintSplash("Aquarium", "Preparing runtime state");
+        var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "Fensalir-Icon.ico");
+        var splashPath = Path.Combine(AppContext.BaseDirectory, "Assets", "Fensalir-Splash.bmp");
+        using var window = Win32Window.Create("Fensalir", width, height, input, iconPath, splashPath, visible: !runtime.Options.Headless);
+        window.PaintSplash("Fensalir", "Preparing runtime state");
         using var synthHost = new AquariumSynthHost();
         using var renderer = CreateRenderer(
             window.Handle,
@@ -28,7 +29,7 @@ public static class AquariumHost
             ParseShaderPath(args),
             runtime.RenderPlan,
             runtime.GraphicsSettings,
-            message => window.PaintSplash("Aquarium", message));
+            message => window.PaintSplash("Fensalir", message));
         var settingsRuntime = runtimeLoader.Runtime;
 
         var frameClock = Stopwatch.StartNew();
@@ -71,7 +72,7 @@ public static class AquariumHost
             renderer.Render(renderFrame, window.ClientWidth, window.ClientHeight);
             if (!runtime.Options.Headless && !renderer.HasPresentedReadyFrame)
             {
-                window.PaintSplash("Aquarium", "Compiling renderer pipelines");
+                window.PaintSplash("Fensalir", "Compiling renderer pipelines");
             }
 
             frames++;
