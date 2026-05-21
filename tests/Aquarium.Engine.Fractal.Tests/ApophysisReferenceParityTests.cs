@@ -122,7 +122,7 @@ public sealed class ApophysisReferenceParityTests
         Assert.Equal(2, result.Report.TransformCount);
         Assert.Equal(new Vector4(1.0f, 0.0f, 0.0f, 1.0f), flame.Transforms[0].Matrix);
         Assert.Equal(new Vector2(-0.1f, 0.2f), flame.Transforms[0].Translation);
-        Assert.Equal(1.0f, flame.Transforms[0].Variations.Linear);
+        Assert.Equal(0.0f, flame.Transforms[0].Variations.Linear);
         Assert.Equal(0.5f, flame.Transforms[0].Variations.Julian);
         Assert.Equal(5.0f, flame.Transforms[0].Variations.JulianPower);
         Assert.Equal(1.25f, flame.Transforms[0].Variations.JulianDist);
@@ -130,7 +130,7 @@ public sealed class ApophysisReferenceParityTests
         Assert.Equal(new Vector4(0.9f, 0.0f, 0.0f, 0.9f), flame.Transforms[0].PostMatrix);
         Assert.Equal(new Vector4(0.25f, -0.75f, 0.75f, 0.25f), flame.Transforms[1].Matrix);
         Assert.Equal(0.8f, flame.Transforms[1].Variations.Disc);
-        Assert.Contains("variation:normal -> linear", result.Report.Transforms[0].ApproximatedFields);
+        Assert.Contains("variationGroup:normal", result.Report.Transforms[0].IgnoredFields);
         Assert.Contains("variation:jwf_gaussian_blur -> stochastic gaussian_blur", result.Report.Transforms[0].ApproximatedFields);
         Assert.Contains("post", result.Report.Transforms[0].AcceptedFields);
         Assert.Empty(result.Report.Transforms[0].RejectedFields);

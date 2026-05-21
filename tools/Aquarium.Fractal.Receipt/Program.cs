@@ -586,8 +586,10 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
 
             var centerX = centerRadius.X;
             var centerY = centerRadius.Y;
-            var radiusX = MathF.Max(MathF.Abs(radiiFalloff.X), MathF.Abs(centerRadius.W));
-            var radiusY = MathF.Max(MathF.Abs(radiiFalloff.Y), MathF.Abs(centerRadius.W));
+            var pixelRadiusX = spanX / width;
+            var pixelRadiusY = spanY / height;
+            var radiusX = MathF.Max(MathF.Max(MathF.Abs(radiiFalloff.X), MathF.Abs(centerRadius.W)), pixelRadiusX);
+            var radiusY = MathF.Max(MathF.Max(MathF.Abs(radiiFalloff.Y), MathF.Abs(centerRadius.W)), pixelRadiusY);
             if (radiusX <= 0.0f || radiusY <= 0.0f)
             {
                 continue;

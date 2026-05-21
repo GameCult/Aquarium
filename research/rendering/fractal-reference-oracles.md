@@ -207,11 +207,25 @@ yet. With full SDF reservoir coverage on the local GTX 1070, the same
 2,000,000 reservoir rows in all three layers. The contact sheet lives at
 `artifacts/fractal-flame-jwildfire-reference/julian-disc-baby-sdf-density-contact.png`.
 
-The remaining visible mismatch is now the right mismatch: Aquarium's SDF
-reservoir density is sparse and shape-shifted relative to FARender's rendered
-density. Fixing that belongs in dialect import, camera/render-filter parity,
-target density weighting, and view-conditioned reservoir feedback, not in
-pretending point occupancy is a rendered form.
+The next correction removed another dialect lie. JWildfire's
+`variationGroup normal="1"` is not the same thing as an explicit `linear`
+variation in FARender. A normal-only diagnostic renders as a constant point in
+FARender, while Aquarium had been adding affine linear geometry. The importer
+now ignores JWildfire `normal` as variation-group metadata; explicit `linear`
+still stays linear for Apophysis/FLAM3-style fixtures. The SDF-density receipt
+also gives subpixel envelopes a minimum one-bin reconstruction footprint so the
+comparison does not quietly collapse back into point occupancy.
+
+After those fixes, the `julian-disc-baby` receipt scored `31.36%` against the
+FARender PPM at `256x256` bounds `-2,-2,2,2`, with `41.692 ms/frame` while
+refreshing all 2,000,000 reservoir rows in all three layers. The contact sheet
+lives at
+`artifacts/fractal-flame-jwildfire-reference/julian-disc-baby-normal-cut-area-contact.png`.
+
+The remaining visible mismatch is now narrower: Aquarium draws the same family
+of form, but its density is still too compact and differently weighted. Fixing
+that belongs in exact JWildfire variation/camera parity, target density
+weighting, and view-conditioned reservoir feedback.
 The next oracle step is to compare Aquarium through a matching density image
 resolve, not raw point occupancy.
 

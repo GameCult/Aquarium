@@ -74,7 +74,8 @@ public static class FractalFlameFileParser
                 ? new Vector2(post[4], post[5])
                 : new Vector2(post[2], post[5]);
         var variations = new FractalFlameVariationWeights(
-            ParseOptionalFloat(variationSource, "linear", 0.0f) + ParseOptionalFloat(variationSource, "normal", 0.0f),
+            ParseOptionalFloat(variationSource, "linear", 0.0f)
+                + (isJWildfireDialect ? 0.0f : ParseOptionalFloat(variationSource, "normal", 0.0f)),
             ParseOptionalFloat(variationSource, "spherical", 0.0f),
             ParseOptionalFloat(variationSource, "bubble", 0.0f),
             ParseOptionalFloat(variationSource, "disc", 0.0f) + ParseOptionalFloat(variationSource, "jwf_disc", 0.0f),
@@ -82,7 +83,7 @@ public static class FractalFlameFileParser
             ParseOptionalFloat(variationSource, "julian_power", ParseOptionalFloat(variationSource, "jwf_julian_power", 2.0f)),
             ParseOptionalFloat(variationSource, "julian_dist", ParseOptionalFloat(variationSource, "jwf_julian_dist", 1.0f)),
             ParseOptionalFloat(variationSource, "gaussian_blur", 0.0f) + ParseOptionalFloat(variationSource, "jwf_gaussian_blur", 0.0f));
-        ClassifyVariationFields(variationSource, accepted, approximated, ignored, rejected);
+        ClassifyVariationFields(variationSource, isJWildfireDialect, accepted, approximated, ignored, rejected);
         ClassifyXformFields(element, variationGroup, accepted, ignored, rejected);
         var transformName = ((string?)element.Attribute("name")) ?? $"xform/{index:0000}";
 
@@ -155,6 +156,7 @@ public static class FractalFlameFileParser
 
     private static void ClassifyVariationFields(
         XElement variationSource,
+        bool isJWildfireDialect,
         List<string> accepted,
         List<string> approximated,
         List<string> ignored,
@@ -185,7 +187,15 @@ public static class FractalFlameFileParser
 
             if (name is "normal")
             {
-                approximated.Add("variation:normal -> linear");
+                if (isJWildfireDialect)
+                {
+                    ignored.Add("variationGroup:normal");
+                }
+                else
+                {
+                    approximated.Add("variation:normal -> linear");
+                }
+
                 continue;
             }
 
