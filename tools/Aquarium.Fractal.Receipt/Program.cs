@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Xml.Linq;
 using Aquarium.Engine.Fractal;
 using Aquarium.Engine.Fractal.Grammar;
 using Aquarium.Engine.Fractal.Lod;
@@ -1144,7 +1145,36 @@ internal sealed record ReceiptOptions(
 
     private static ReceiptOptions ParseHistogramBounds(ReceiptOptions options, string value)
     {
+        if (string.Equals(value, "flame-camera", StringComparison.OrdinalIgnoreCase))
+        {
+            if (options.ProgramFlamePath is null)
+            {
+                throw new ArgumentException("Histogram bounds 'flame-camera' requires --program-flame to be parsed first.");
+            }
+
+            return options with { HistogramBounds = LoadFlameCameraBounds(options.ProgramFlamePath) };
+        }
+
         return options with { HistogramBounds = ParseBounds(value, "Histogram bounds") };
+    }
+
+    private static Vector4 LoadFlameCameraBounds(string flamePath)
+    {
+        var document = XDocument.Load(flamePath);
+        var flame = document.Descendants("flame").FirstOrDefault()
+            ?? throw new FormatException("Flame file does not contain a flame element.");
+        var size = ParseFloatList((string?)flame.Attribute("size"), expectedCount: 2, "flame size");
+        var center = ParseOptionalFloatList((string?)flame.Attribute("center"), expectedCount: 2)
+            ?? [0.0f, 0.0f];
+        var scale = ParseRequiredPositiveFloat((string?)flame.Attribute("scale"), "flame scale");
+        var zoom = ParseOptionalFloat((string?)flame.Attribute("cam_zoom"), 1.0f);
+        var width = size[0] / MathF.Max(scale * zoom, 0.000001f);
+        var height = size[1] / MathF.Max(scale * zoom, 0.000001f);
+        return new Vector4(
+            center[0] - width * 0.5f,
+            center[1] - height * 0.5f,
+            center[0] + width * 0.5f,
+            center[1] + height * 0.5f);
     }
 
     private static ReceiptOptions AddVisualParityView(ReceiptOptions options, string value)
@@ -1173,6 +1203,51 @@ internal sealed record ReceiptOptions(
             float.Parse(parts[1], System.Globalization.CultureInfo.InvariantCulture),
             float.Parse(parts[2], System.Globalization.CultureInfo.InvariantCulture),
             float.Parse(parts[3], System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    private static float[] ParseFloatList(string? source, int expectedCount, string label)
+    {
+        if (string.IsNullOrWhiteSpace(source))
+        {
+            throw new FormatException($"{label} must not be empty.");
+        }
+
+        var values = source
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(value => float.Parse(value, System.Globalization.CultureInfo.InvariantCulture))
+            .ToArray();
+        if (values.Length != expectedCount)
+        {
+            throw new FormatException($"{label} expected {expectedCount} values, got {values.Length}.");
+        }
+
+        return values;
+    }
+
+    private static float[]? ParseOptionalFloatList(string? source, int expectedCount)
+    {
+        return string.IsNullOrWhiteSpace(source)
+            ? null
+            : ParseFloatList(source, expectedCount, "optional float list");
+    }
+
+    private static float ParseRequiredPositiveFloat(string? source, string label)
+    {
+        if (string.IsNullOrWhiteSpace(source)
+            || !float.TryParse(source, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var value)
+            || value <= 0.0f)
+        {
+            throw new FormatException($"{label} must be positive.");
+        }
+
+        return value;
+    }
+
+    private static float ParseOptionalFloat(string? source, float fallback)
+    {
+        return string.IsNullOrWhiteSpace(source)
+            ? fallback
+            : float.Parse(source, System.Globalization.CultureInfo.InvariantCulture);
     }
 
     private static uint ParseUInt32(string value)

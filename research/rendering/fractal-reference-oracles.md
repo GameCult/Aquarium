@@ -218,8 +218,11 @@ comparison does not quietly collapse back into point occupancy.
 
 After those fixes, the `julian-disc-baby` receipt scored `31.36%` against the
 FARender PPM at `256x256` bounds `-2,-2,2,2`, with `41.692 ms/frame` while
-refreshing all 2,000,000 reservoir rows in all three layers. The contact sheet
-lives at
+refreshing all 2,000,000 reservoir rows in all three layers. Switching the
+receipt to FARender-style flame camera bounds (`size / scale / cam_zoom`) raised
+the same gate to `43.13%` with `68.01%` occupancy overlap; pass
+`-HistogramBounds flame-camera` through `scripts/fractal-splat-receipt.ps1` for
+that path. The contact sheet lives at
 `artifacts/fractal-flame-jwildfire-reference/julian-disc-baby-normal-cut-area-contact.png`.
 
 The remaining visible mismatch is now narrower: Aquarium draws the same family
