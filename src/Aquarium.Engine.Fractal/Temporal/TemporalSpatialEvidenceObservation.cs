@@ -11,7 +11,9 @@ public readonly record struct TemporalSpatialEvidenceObservation(
     Vector4 Payload1,
     float Confidence,
     float ObservedTimeSeconds,
-    int FieldId = 0);
+    int FieldId = 0,
+    AquariumFieldLayer Layer = AquariumFieldLayer.Form,
+    AquariumFieldEncoding Encoding = AquariumFieldEncoding.Density);
 
 public readonly record struct TemporalSpatialEvidenceSample(
     string StableKey,
@@ -25,7 +27,9 @@ public readonly record struct TemporalSpatialEvidenceSample(
     float Confidence,
     float HistoryWeight,
     float LastObservedTimeSeconds,
-    int FieldId);
+    int FieldId,
+    AquariumFieldLayer Layer = AquariumFieldLayer.Form,
+    AquariumFieldEncoding Encoding = AquariumFieldEncoding.Density);
 
 public sealed class TemporalSpatialEvidenceSnapshot
 {

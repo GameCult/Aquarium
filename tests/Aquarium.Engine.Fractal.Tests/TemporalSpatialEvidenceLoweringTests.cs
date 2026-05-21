@@ -22,6 +22,8 @@ public sealed class TemporalSpatialEvidenceLoweringTests
             FieldId: 44);
 
         var lowered = TemporalSpatialEvidenceLowering.FromGaussianObservation(observation);
+        Assert.Equal(AquariumFieldLayer.Form, lowered.Layer);
+        Assert.Equal(AquariumFieldEncoding.Density, lowered.Encoding);
         var sample = new TemporalSpatialEvidenceSample(
             lowered.StableKey,
             lowered.Center,
@@ -34,7 +36,9 @@ public sealed class TemporalSpatialEvidenceLoweringTests
             lowered.Confidence,
             HistoryWeight: 0.6f,
             lowered.ObservedTimeSeconds,
-            lowered.FieldId);
+            lowered.FieldId,
+            lowered.Layer,
+            lowered.Encoding);
         var gaussian = TemporalSpatialEvidenceLowering.ToTemporalGaussian(sample);
 
         Assert.Equal(observation.StableKey, gaussian.StableKey);
@@ -61,6 +65,8 @@ public sealed class TemporalSpatialEvidenceLoweringTests
             FieldId: 91);
 
         var lowered = TemporalSpatialEvidenceLowering.FromGpuFusionSeed(seed, observedTimeSeconds: 3.0f);
+        Assert.Equal(AquariumFieldLayer.Form, lowered.Layer);
+        Assert.Equal(AquariumFieldEncoding.Confidence, lowered.Encoding);
         var sample = new TemporalSpatialEvidenceSample(
             lowered.StableKey,
             lowered.Center,
@@ -73,7 +79,9 @@ public sealed class TemporalSpatialEvidenceLoweringTests
             lowered.Confidence,
             lowered.Payload1.Z,
             lowered.ObservedTimeSeconds,
-            lowered.FieldId);
+            lowered.FieldId,
+            lowered.Layer,
+            lowered.Encoding);
         var roundTrip = TemporalSpatialEvidenceLowering.ToGpuFusionSeed(sample);
 
         Assert.Equal(seed.StableKey, roundTrip.StableKey);

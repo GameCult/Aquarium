@@ -48,6 +48,19 @@ public sealed class FractalProbeSampleTests
     }
 
     [Fact]
+    public void ReuseValidatorRejectsMismatchedFieldEncodings()
+    {
+        var graph = DomainGraph();
+        var source = Probe("zyphos/surface", Vector3.Zero);
+        var target = Probe("zyphos/surface", Vector3.Zero, encoding: AquariumFieldEncoding.Density);
+
+        var result = FractalProbeReuseValidator.Validate(source, target, graph, maxLocalShift: 1.0f);
+
+        Assert.False(result.CanReuse);
+        Assert.Equal(FractalProbeReuseRejection.FieldMismatch, result.Rejection);
+    }
+
+    [Fact]
     public void ReuseValidatorRejectsExcessiveLocalShift()
     {
         var graph = DomainGraph();
@@ -120,7 +133,8 @@ public sealed class FractalProbeSampleTests
         string domainKey,
         Vector3 localCenter,
         float target = 1.0f,
-        float sourcePdf = 1.0f)
+        float sourcePdf = 1.0f,
+        AquariumFieldEncoding encoding = AquariumFieldEncoding.SignedDistance)
     {
         return new FractalProbeSample(
             new AquariumFractalKey(domainKey),
@@ -130,7 +144,8 @@ public sealed class FractalProbeSampleTests
             TargetContribution: target,
             SourcePdf: sourcePdf,
             MaterialDelta: 0.25f,
-            PayloadHandle: 7);
+            PayloadHandle: 7,
+            Encoding: encoding);
     }
 
     private static FractalDomainGraph DomainGraph()

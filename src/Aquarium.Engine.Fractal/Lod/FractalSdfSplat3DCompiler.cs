@@ -10,6 +10,11 @@ public static class FractalSdfSplat3DCompiler
         float falloff = 4.0f,
         float shapePower = 1.0f)
     {
+        if (probe.Layer != AquariumFieldLayer.Form || probe.Encoding != AquariumFieldEncoding.SignedDistance)
+        {
+            throw new ArgumentException("3D SDF splat lowering only accepts Form/SignedDistance probes.", nameof(probe));
+        }
+
         if (!float.IsFinite(probe.BoundRadius) || probe.BoundRadius <= 0.0f)
         {
             throw new ArgumentOutOfRangeException(nameof(probe), probe.BoundRadius, "Probe bound radius must be positive and finite.");

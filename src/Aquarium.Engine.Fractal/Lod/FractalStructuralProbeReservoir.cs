@@ -16,7 +16,9 @@ public readonly record struct FractalProbeReservoirSnapshot(
     float WeightSum,
     int CandidateCount,
     float ContributionWeight,
-    int PayloadHandle)
+    int PayloadHandle,
+    AquariumFieldLayer Layer = AquariumFieldLayer.Form,
+    AquariumFieldEncoding Encoding = AquariumFieldEncoding.SignedDistance)
 {
     public FractalProbeSample ToProbeSample()
     {
@@ -33,7 +35,9 @@ public readonly record struct FractalProbeReservoirSnapshot(
             TargetContribution,
             SourcePdf,
             MaterialDelta,
-            PayloadHandle);
+            PayloadHandle,
+            Layer,
+            Encoding);
     }
 }
 
@@ -44,7 +48,9 @@ public static class FractalStructuralProbeReservoir
         IReadOnlyList<AquariumFractalSummary> summaries,
         IReadOnlyList<AquariumSelectedCut> selectedCut,
         float projectedPixelsPerWorldUnit,
-        IFractalRandom random)
+        IFractalRandom random,
+        AquariumFieldLayer layer = AquariumFieldLayer.Form,
+        AquariumFieldEncoding encoding = AquariumFieldEncoding.SignedDistance)
     {
         ArgumentNullException.ThrowIfNull(tree);
         ArgumentNullException.ThrowIfNull(summaries);
@@ -74,7 +80,9 @@ public static class FractalStructuralProbeReservoir
                 node.DomainKey,
                 projectedPixelsPerWorldUnit,
                 sourceProbability,
-                payloadHandle: index);
+                payloadHandle: index,
+                layer,
+                encoding);
             reservoir.Add(candidate, random.NextDouble());
         }
 
@@ -101,7 +109,9 @@ public static class FractalStructuralProbeReservoir
             reservoir.WeightSum,
             reservoir.CandidateCount,
             reservoir.ContributionWeight,
-            selected.PayloadHandle);
+            selected.PayloadHandle,
+            selected.Layer,
+            selected.Encoding);
     }
 
     private static FractalProbeReservoirSnapshot Empty()
@@ -118,6 +128,8 @@ public static class FractalStructuralProbeReservoir
             WeightSum: 0.0f,
             CandidateCount: 0,
             ContributionWeight: 0.0f,
-            PayloadHandle: 0);
+            PayloadHandle: 0,
+            Layer: AquariumFieldLayer.Form,
+            Encoding: AquariumFieldEncoding.SignedDistance);
     }
 }

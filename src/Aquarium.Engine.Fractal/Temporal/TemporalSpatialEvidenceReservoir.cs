@@ -57,13 +57,14 @@ public sealed class TemporalSpatialEvidenceReservoir
                 continue;
             }
 
-            if (tracks.TryGetValue(observation.StableKey, out var current))
+            var trackKey = TrackKey(observation);
+            if (tracks.TryGetValue(trackKey, out var current))
             {
-                tracks[observation.StableKey] = current.Update(observation, Smoothing);
+                tracks[trackKey] = current.Update(observation, Smoothing);
             }
             else
             {
-                tracks[observation.StableKey] = TemporalSpatialEvidenceTrack.Create(observation);
+                tracks[trackKey] = TemporalSpatialEvidenceTrack.Create(observation);
             }
         }
 
@@ -101,7 +102,9 @@ public sealed class TemporalSpatialEvidenceReservoir
                 track.Confidence,
                 historyWeight,
                 track.LastObservedTimeSeconds,
-                track.FieldId));
+                track.FieldId,
+                track.Layer,
+                track.Encoding));
         }
 
         foreach (var key in expired)
@@ -122,11 +125,11 @@ public sealed class TemporalSpatialEvidenceReservoir
             return;
         }
 
-        var evict = tracks.Values
-            .OrderBy(track => track.Confidence)
-            .ThenBy(track => track.LastObservedTimeSeconds)
+        var evict = tracks
+            .OrderBy(item => item.Value.Confidence)
+            .ThenBy(item => item.Value.LastObservedTimeSeconds)
             .Take(tracks.Count - MaxTrackCount)
-            .Select(track => track.StableKey)
+            .Select(item => item.Key)
             .ToArray();
 
         foreach (var key in evict)
@@ -145,7 +148,9 @@ public sealed class TemporalSpatialEvidenceReservoir
         Vector4 Payload1,
         float Confidence,
         float LastObservedTimeSeconds,
-        int FieldId)
+        int FieldId,
+        AquariumFieldLayer Layer,
+        AquariumFieldEncoding Encoding)
     {
         public static TemporalSpatialEvidenceTrack Create(TemporalSpatialEvidenceObservation observation)
         {
@@ -159,7 +164,9 @@ public sealed class TemporalSpatialEvidenceReservoir
                 observation.Payload1,
                 Math.Clamp(observation.Confidence, 0.0f, 1.0f),
                 observation.ObservedTimeSeconds,
-                observation.FieldId);
+                observation.FieldId,
+                observation.Layer,
+                observation.Encoding);
         }
 
         public TemporalSpatialEvidenceTrack Update(TemporalSpatialEvidenceObservation observation, float smoothing)
@@ -179,6 +186,8 @@ public sealed class TemporalSpatialEvidenceReservoir
                 Confidence = Math.Clamp((Confidence * 0.85f) + (observation.Confidence * 0.15f), 0.0f, 1.0f),
                 LastObservedTimeSeconds = observation.ObservedTimeSeconds,
                 FieldId = observation.FieldId,
+                Layer = observation.Layer,
+                Encoding = observation.Encoding,
             };
         }
 
@@ -193,5 +202,10 @@ public sealed class TemporalSpatialEvidenceReservoir
                 ? Quaternion.Identity
                 : Quaternion.Normalize(orientation);
         }
+    }
+
+    private static string TrackKey(TemporalSpatialEvidenceObservation observation)
+    {
+        return $"{observation.Layer}:{observation.Encoding}:{observation.StableKey}";
     }
 }

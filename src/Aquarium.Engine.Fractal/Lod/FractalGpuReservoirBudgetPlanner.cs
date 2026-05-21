@@ -9,6 +9,8 @@ public enum FractalGpuReservoirPassKind
 
 public readonly record struct FractalGpuReservoirPassPlan(
     FractalGpuReservoirPassKind Kind,
+    AquariumFieldLayer Layer,
+    AquariumFieldEncoding Encoding,
     int ResidentEntries,
     int UpdatesThisFrame,
     int CandidatesPerUpdate,
@@ -98,6 +100,8 @@ public static class FractalGpuReservoirBudgetPlanner
         {
             return new FractalGpuReservoirPassPlan(
                 kind,
+                LayerFor(kind),
+                EncodingFor(kind),
                 splatCount,
                 reservoirUpdatesPerPass,
                 candidatesPerUpdate,
@@ -105,5 +109,27 @@ public static class FractalGpuReservoirBudgetPlanner
                 checked((ulong)splatCount * (ulong)reservoirStrideBytes),
                 checked((ulong)reservoirUpdatesPerPass * (ulong)candidatesPerUpdate));
         }
+    }
+
+    private static AquariumFieldLayer LayerFor(FractalGpuReservoirPassKind kind)
+    {
+        return kind switch
+        {
+            FractalGpuReservoirPassKind.SdfEnvelope => AquariumFieldLayer.Form,
+            FractalGpuReservoirPassKind.PbrMaterial => AquariumFieldLayer.Appearance,
+            FractalGpuReservoirPassKind.Radiosity => AquariumFieldLayer.Transport,
+            _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown reservoir pass kind."),
+        };
+    }
+
+    private static AquariumFieldEncoding EncodingFor(FractalGpuReservoirPassKind kind)
+    {
+        return kind switch
+        {
+            FractalGpuReservoirPassKind.SdfEnvelope => AquariumFieldEncoding.SignedDistance,
+            FractalGpuReservoirPassKind.PbrMaterial => AquariumFieldEncoding.Material,
+            FractalGpuReservoirPassKind.Radiosity => AquariumFieldEncoding.Radiance,
+            _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown reservoir pass kind."),
+        };
     }
 }

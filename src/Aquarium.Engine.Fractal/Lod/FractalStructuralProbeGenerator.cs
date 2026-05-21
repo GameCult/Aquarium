@@ -13,7 +13,9 @@ public static class FractalStructuralProbeGenerator
         AquariumFractalKey domainKey,
         float projectedPixelsPerWorldUnit,
         float sourcePdf,
-        int payloadHandle = 0)
+        int payloadHandle = 0,
+        AquariumFieldLayer layer = AquariumFieldLayer.Form,
+        AquariumFieldEncoding encoding = AquariumFieldEncoding.SignedDistance)
     {
         var min = new Vector2(summary.BoundsMinMax.X, summary.BoundsMinMax.Y);
         var max = new Vector2(summary.BoundsMinMax.Z, summary.BoundsMinMax.W);
@@ -32,7 +34,9 @@ public static class FractalStructuralProbeGenerator
             target,
             MathF.Max(sourcePdf, MinimumSourcePdf),
             MathF.Max(summary.MaxMaterialDelta, 0.0f),
-            payloadHandle);
+            payloadHandle,
+            layer,
+            encoding);
     }
 
     public static ResampledImportanceCandidate<FractalProbeSample> BuildCandidate(
@@ -40,13 +44,17 @@ public static class FractalStructuralProbeGenerator
         AquariumFractalKey domainKey,
         float projectedPixelsPerWorldUnit,
         double sourceProbability,
-        int payloadHandle = 0)
+        int payloadHandle = 0,
+        AquariumFieldLayer layer = AquariumFieldLayer.Form,
+        AquariumFieldEncoding encoding = AquariumFieldEncoding.SignedDistance)
     {
         return FromSummary(
             summary,
             domainKey,
             projectedPixelsPerWorldUnit,
             (float)Math.Clamp(sourceProbability, MinimumSourcePdf, 1.0),
-            payloadHandle).ToReservoirCandidate();
+            payloadHandle,
+            layer,
+            encoding).ToReservoirCandidate();
     }
 }

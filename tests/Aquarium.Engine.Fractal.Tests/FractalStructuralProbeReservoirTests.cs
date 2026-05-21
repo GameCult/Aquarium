@@ -27,9 +27,39 @@ public sealed class FractalStructuralProbeReservoirTests
         Assert.Equal(Vector3.Zero, snapshot.LocalCenter);
         Assert.Equal(1, snapshot.CandidateCount);
         Assert.Equal(0, snapshot.PayloadHandle);
+        Assert.Equal(AquariumFieldLayer.Form, snapshot.Layer);
+        Assert.Equal(AquariumFieldEncoding.SignedDistance, snapshot.Encoding);
         Assert.True(snapshot.TargetContribution > 0.0f);
         Assert.True(snapshot.SourcePdf > 0.0f);
         Assert.True(snapshot.WeightSum > 0.0f);
+    }
+
+    [Fact]
+    public void StructuralProbeReservoirCanSelectTransparentDensityForm()
+    {
+        var domainKey = new AquariumFractalKey("domain/flame");
+        var rootKey = new AquariumFractalKey("domain/flame/root");
+        var domain = new AquariumFractalDomain(domainKey, AquariumFractalDomainKind.Object3D, default, Vector4.Zero, Vector4.Zero);
+        var tree = FractalOwnershipTreeBuilder.BuildFlatUnion(domain, rootKey, [
+            Claim("claim/density", domainKey, rootKey, Vector2.Zero, Vector2.One),
+        ]);
+        var summaries = FractalSummaryBuilder.Build(tree);
+        var cut = FractalSelectedCutBuilder.Build(summaries, _ => 8.0f, maxEstimatedCost: 8.0f);
+
+        var snapshot = FractalStructuralProbeReservoir.Build(
+            tree,
+            summaries,
+            cut,
+            8.0f,
+            new TestFractalRandom(0.0),
+            AquariumFieldLayer.Form,
+            AquariumFieldEncoding.Density);
+        var sample = snapshot.ToProbeSample();
+
+        Assert.True(snapshot.HasSample);
+        Assert.Equal(AquariumFieldLayer.Form, snapshot.Layer);
+        Assert.Equal(AquariumFieldEncoding.Density, snapshot.Encoding);
+        Assert.Equal(AquariumFieldEncoding.Density, sample.Encoding);
     }
 
     [Fact]

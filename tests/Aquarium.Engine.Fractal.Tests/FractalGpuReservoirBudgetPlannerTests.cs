@@ -25,6 +25,22 @@ public sealed class FractalGpuReservoirBudgetPlannerTests
                 FractalGpuReservoirPassKind.Radiosity,
             },
             plan.Passes.Select(pass => pass.Kind).ToArray());
+        Assert.Equal(
+            new[]
+            {
+                AquariumFieldLayer.Form,
+                AquariumFieldLayer.Appearance,
+                AquariumFieldLayer.Transport,
+            },
+            plan.Passes.Select(pass => pass.Layer).ToArray());
+        Assert.Equal(
+            new[]
+            {
+                AquariumFieldEncoding.SignedDistance,
+                AquariumFieldEncoding.Material,
+                AquariumFieldEncoding.Radiance,
+            },
+            plan.Passes.Select(pass => pass.Encoding).ToArray());
 
         foreach (var pass in plan.Passes)
         {

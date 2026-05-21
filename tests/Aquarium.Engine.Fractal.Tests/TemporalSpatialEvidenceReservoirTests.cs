@@ -76,13 +76,33 @@ public sealed class TemporalSpatialEvidenceReservoirTests
         Assert.Equal(payload1, sample.Payload1);
     }
 
+    [Fact]
+    public void ReservoirKeepsOpaqueAndTransparentFieldsAsSeparateTracks()
+    {
+        var reservoir = new TemporalSpatialEvidenceReservoir(
+            accumulationWindowSeconds: 5.0f,
+            presentationDelaySeconds: 0.0f);
+
+        reservoir.Observe([
+            Observation("feature/shared", Vector3.Zero, time: 0.0f, encoding: AquariumFieldEncoding.SignedDistance),
+            Observation("feature/shared", Vector3.One, time: 0.0f, encoding: AquariumFieldEncoding.Density),
+        ]);
+
+        var samples = reservoir.BuildSnapshot(renderTimeSeconds: 0.0f).Samples;
+
+        Assert.Equal(2, samples.Count);
+        Assert.Contains(samples, sample => sample.StableKey == "feature/shared" && sample.Encoding == AquariumFieldEncoding.SignedDistance);
+        Assert.Contains(samples, sample => sample.StableKey == "feature/shared" && sample.Encoding == AquariumFieldEncoding.Density);
+    }
+
     private static TemporalSpatialEvidenceObservation Observation(
         string key,
         Vector3 center,
         float time,
         float confidence = 1.0f,
         Vector4? payload0 = null,
-        Vector4? payload1 = null)
+        Vector4? payload1 = null,
+        AquariumFieldEncoding encoding = AquariumFieldEncoding.Density)
     {
         return new TemporalSpatialEvidenceObservation(
             key,
@@ -93,6 +113,7 @@ public sealed class TemporalSpatialEvidenceReservoirTests
             payload1 ?? Vector4.Zero,
             confidence,
             time,
-            FieldId: 3);
+            FieldId: 3,
+            Encoding: encoding);
     }
 }

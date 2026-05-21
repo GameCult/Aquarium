@@ -48,6 +48,27 @@ public enum AquariumFractalPayloadKind
     SignedDistance,
 }
 
+public enum AquariumFieldLayer
+{
+    Form,
+    Appearance,
+    Transport,
+}
+
+public enum AquariumFieldEncoding
+{
+    SignedDistance,
+    Height,
+    Density,
+    Extinction,
+    Material,
+    Phase,
+    Emission,
+    Radiance,
+    Feature,
+    Confidence,
+}
+
 public enum AquariumFractalSurfacePageKind
 {
     Height,
@@ -161,12 +182,72 @@ public readonly record struct AquariumFractalSdfSplat3D(
     float MaterialValue,
     float Confidence);
 
+public readonly record struct AquariumFractalDensitySplat3DKey
+{
+    public AquariumFractalDensitySplat3DKey(
+        AquariumFractalKey domainKey,
+        AquariumFractalKey nodeKey,
+        int payloadHandle)
+    {
+        if (domainKey.Value is null)
+        {
+            throw new ArgumentException("3D density splat domain key must not be empty.", nameof(domainKey));
+        }
+
+        if (nodeKey.Value is null)
+        {
+            throw new ArgumentException("3D density splat node key must not be empty.", nameof(nodeKey));
+        }
+
+        if (payloadHandle < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(payloadHandle), payloadHandle, "3D density splat payload handle must not be negative.");
+        }
+
+        DomainKey = domainKey;
+        NodeKey = nodeKey;
+        PayloadHandle = payloadHandle;
+    }
+
+    public AquariumFractalKey DomainKey { get; }
+
+    public AquariumFractalKey NodeKey { get; }
+
+    public int PayloadHandle { get; }
+
+    public string Value => $"{DomainKey.Value}:{NodeKey.Value}:density3d:{PayloadHandle:D6}";
+
+    public override string ToString()
+    {
+        return Value;
+    }
+}
+
+public readonly record struct AquariumFractalDensitySplat3D(
+    AquariumFractalDensitySplat3DKey Key,
+    Vector3 Center,
+    Quaternion Orientation,
+    Vector3 Radii,
+    float Falloff,
+    float ShapePower,
+    float Density,
+    float Extinction,
+    float Confidence);
+
 [StructLayout(LayoutKind.Sequential)]
 public readonly record struct AquariumPackedFractalSdfSplat3D(
     Vector4 CenterRadius,
     Vector4 Orientation,
     Vector4 RadiiFalloff,
     Vector4 MaterialConfidence,
+    Vector4 Key);
+
+[StructLayout(LayoutKind.Sequential)]
+public readonly record struct AquariumPackedFractalDensitySplat3D(
+    Vector4 CenterRadius,
+    Vector4 Orientation,
+    Vector4 RadiiFalloff,
+    Vector4 DensityExtinctionConfidence,
     Vector4 Key);
 
 [StructLayout(LayoutKind.Sequential)]

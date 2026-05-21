@@ -580,14 +580,16 @@ solids use SDF/level-set packets; transparent media use density/extinction
 packets. Keep distance safety conservative and LOD gated for solids, and keep
 volume cost bounded by explicit extinction/support budgets.
 
-Current state: `AquariumFractalSdfSplat3DKey` and
-`AquariumFractalSdfSplat3D` define stable compact-support 3D SDF splat packets.
-`FractalSdfSplat3DCompiler` lowers structural probe samples into splats, and
-`FractalSdfSplat3DKernel` provides CPU compact-weight and signed-distance
-parity math. Zyphos now exposes a first structural SDF splat from its probe
-reservoir. D3D12 lowering and object/body recursive form integration remain
-open. Volume form packets are not implemented yet; flames are the current
-pressure proving that SDF packet naming is too narrow.
+Current state: `FractalProbeSample` now carries explicit field layer and
+encoding metadata. The same reservoir sample type can represent opaque
+`Form/SignedDistance` and transparent `Form/Density` or `Form/Extinction`
+evidence without creating a second cache. `AquariumFractalSdfSplat3D` and
+`FractalSdfSplat3DCompiler` own the opaque SDF lowering path;
+`AquariumFractalDensitySplat3D` and `FractalDensitySplat3DCompiler` own the
+transparent density/extinction lowering path. Reuse rejects mismatched
+encodings before lineage/local-shift reuse can smear density and SDF together.
+Zyphos now exposes a first structural SDF splat from its probe reservoir. D3D12
+lowering and object/body recursive form integration remain open.
 
 ### Phase G: 2D-Projected-To-3D Field Backend
 

@@ -12,7 +12,9 @@ public readonly record struct FractalProbeSample(
     float TargetContribution,
     float SourcePdf,
     float MaterialDelta,
-    int PayloadHandle)
+    int PayloadHandle,
+    AquariumFieldLayer Layer = AquariumFieldLayer.Form,
+    AquariumFieldEncoding Encoding = AquariumFieldEncoding.SignedDistance)
 {
     public ResampledImportanceCandidate<FractalProbeSample> ToReservoirCandidate()
     {
@@ -30,6 +32,7 @@ public enum FractalProbeReuseRejection
     DifferentLineage,
     ExcessiveLocalShift,
     InvalidBounds,
+    FieldMismatch,
     ExcessiveCameraMotion,
     Disoccluded,
     MaterialMismatch,
@@ -73,6 +76,11 @@ public static class FractalProbeReuseValidator
         if (!domains.Contains(source.DomainKey) || !domains.Contains(target.DomainKey))
         {
             return new FractalProbeReuseResult(false, FractalProbeReuseRejection.UnknownDomain, 0.0f);
+        }
+
+        if (source.Layer != target.Layer || source.Encoding != target.Encoding)
+        {
+            return new FractalProbeReuseResult(false, FractalProbeReuseRejection.FieldMismatch, 0.0f);
         }
 
         if (!ShareLineage(source.DomainKey, target.DomainKey, domains))

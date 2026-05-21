@@ -65,4 +65,23 @@ public sealed class FractalSdfSplat3DCompilerTests
 
         Assert.Equal("thickness", ex.ParamName);
     }
+
+    [Fact]
+    public void SdfSplat3DCompilerRejectsDensityFormProbe()
+    {
+        var probe = new FractalProbeSample(
+            new AquariumFractalKey("domain/flame"),
+            new AquariumFractalKey("node/flame"),
+            Vector3.Zero,
+            BoundRadius: 1.0f,
+            TargetContribution: 1.0f,
+            SourcePdf: 1.0f,
+            MaterialDelta: 0.0f,
+            PayloadHandle: 0,
+            Encoding: AquariumFieldEncoding.Density);
+
+        var ex = Assert.Throws<ArgumentException>(() => FractalSdfSplat3DCompiler.FromProbe(probe, thickness: 1.0f));
+
+        Assert.Equal("probe", ex.ParamName);
+    }
 }

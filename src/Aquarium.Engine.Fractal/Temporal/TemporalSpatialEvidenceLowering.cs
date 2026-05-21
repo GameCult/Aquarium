@@ -20,7 +20,9 @@ public static class TemporalSpatialEvidenceLowering
                 0.0f),
             observation.Confidence,
             observation.ObservedTimeSeconds,
-            observation.FieldId);
+            observation.FieldId,
+            AquariumFieldLayer.Form,
+            AquariumFieldEncoding.Density);
     }
 
     public static AquariumTemporalSdfGaussian ToTemporalGaussian(TemporalSpatialEvidenceSample sample)
@@ -56,7 +58,9 @@ public static class TemporalSpatialEvidenceLowering
                 0.0f),
             seed.Confidence,
             observedTimeSeconds,
-            seed.FieldId);
+            seed.FieldId,
+            AquariumFieldLayer.Form,
+            AquariumFieldEncoding.Confidence);
     }
 
     public static AquariumGpuFusionSeed ToGpuFusionSeed(TemporalSpatialEvidenceSample sample)
