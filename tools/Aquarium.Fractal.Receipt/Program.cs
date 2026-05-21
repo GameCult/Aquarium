@@ -67,7 +67,8 @@ if (importReportPath is not null)
 if (receipt.VisualParity is not null)
 {
     Console.WriteLine($"visual parity reference: {receipt.VisualParity.ReferenceSource}");
-    Console.WriteLine($"visual parity samples: {receipt.VisualParity.ComparedSamples:N0}/{receipt.VisualParity.ReferenceSamples:N0}");
+    Console.WriteLine($"visual parity candidate: {receipt.VisualParity.CandidateSource}");
+    Console.WriteLine($"visual parity density mass: {receipt.VisualParity.ComparedSamples:N0}/{receipt.VisualParity.ReferenceSamples:N0}");
     Console.WriteLine($"visual parity views: {receipt.VisualParity.Views.Count:N0}");
     Console.WriteLine($"visual parity bins: {receipt.VisualParity.Width}x{receipt.VisualParity.Height}");
     Console.WriteLine($"visual parity occupancy overlap: {receipt.VisualParity.OccupancyOverlapPercent:0.00}%");
@@ -309,7 +310,15 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
         }
 
         var checksum = totalReadbackBytes == 0 ? 0UL : Checksum(readback, (int)totalReadbackBytes);
-        var visualParity = totalReadbackBytes == 0 ? null : BuildVisualParity(options, readback, splatStride, (int)(readbackSplatBytes / (ulong)splatStride));
+        var visualParity = totalReadbackBytes == 0
+            ? null
+            : BuildVisualParity(
+                options,
+                readback,
+                readbackSplatBytes,
+                readbackReservoirBytes,
+                reservoirStride,
+                (int)(readbackSplatBytes / (ulong)splatStride));
         var gpuSeconds = measuredGpuTicks / (double)timestampFrequency;
         var gpuMsPerFrame = gpuSeconds * 1000.0 / Math.Max(measuredFrames, 1);
         var cpuMsPerFrame = measuredCpuTicks * 1000.0 / Stopwatch.Frequency / Math.Max(measuredFrames, 1);
@@ -472,7 +481,9 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
     private static unsafe VisualParityReceipt? BuildVisualParity(
         ReceiptOptions options,
         ID3D12Resource readback,
-        int splatStride,
+        ulong readbackSplatBytes,
+        ulong readbackReservoirBytes,
+        int reservoirStride,
         int readbackSplatCount)
     {
         if (!options.VisualParity || readbackSplatCount <= 0)
@@ -480,15 +491,9 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
             return null;
         }
 
-        var points = new Vector2[readbackSplatCount];
-        var splats = (AquariumPackedFractalSdfSplat3D*)readback.Map<byte>(0);
-        for (var index = 0; index < points.Length; index++)
-        {
-            var center = splats[index].CenterRadius;
-            points[index] = new Vector2(center.X, center.Y);
-        }
-
-        readback.Unmap(0);
+        var readbackReservoirCount = Math.Min(
+            readbackSplatCount,
+            (int)(readbackReservoirBytes / (ulong)reservoirStride));
         var views = options.VisualParityViews.Count > 0
             ? options.VisualParityViews
             : [new VisualParityView("global", options.HistogramBounds)];
@@ -499,6 +504,28 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
             ? BuildCpuFlameReferencePoints(options)
             : null;
         var viewReceipts = new VisualParityViewReceipt[views.Count];
+        var candidateHistograms = new FractalPointHistogram[views.Count];
+        var candidateSource = "Aquarium SDF envelope reservoir density";
+        var comparedSamples = 0;
+        var basePtr = readback.Map<byte>(0);
+        try
+        {
+            var reservoirs = (AquariumPackedSdfEnvelopeReservoir*)((byte*)basePtr + readbackSplatBytes);
+            for (var index = 0; index < views.Count; index++)
+            {
+                candidateHistograms[index] = BuildSdfEnvelopeDensityHistogram(
+                    reservoirs,
+                    readbackReservoirCount,
+                    options.HistogramWidth,
+                    options.HistogramHeight,
+                    views[index].Bounds);
+            }
+        }
+        finally
+        {
+            readback.Unmap(0);
+        }
+
         for (var index = 0; index < views.Count; index++)
         {
             var referenceHistogram = externalReference is null
@@ -508,15 +535,15 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
                 options,
                 views[index],
                 referenceHistogram,
-                points,
-                options.HistogramWidth,
-                options.HistogramHeight);
+                candidateHistograms[index]);
+            comparedSamples = Math.Max(comparedSamples, candidateHistograms[index].HitCount);
         }
 
         var primary = viewReceipts[0];
         return new VisualParityReceipt(
             externalReference is null ? "Aquarium CPU flame oracle" : Path.GetFullPath(options.ReferenceDensityPpmPath!),
-            readbackSplatCount,
+            candidateSource,
+            comparedSamples,
             externalReference?.TotalLuminance ?? options.VisualParityReferenceSamples,
             options.HistogramWidth,
             options.HistogramHeight,
@@ -534,17 +561,93 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
             viewReceipts);
     }
 
+    private static unsafe FractalPointHistogram BuildSdfEnvelopeDensityHistogram(
+        AquariumPackedSdfEnvelopeReservoir* reservoirs,
+        int count,
+        int width,
+        int height,
+        Vector4 bounds)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
+
+        var bins = new int[width * height];
+        var spanX = MathF.Max(bounds.Z - bounds.X, 0.000001f);
+        var spanY = MathF.Max(bounds.W - bounds.Y, 0.000001f);
+        for (var index = 0; index < count; index++)
+        {
+            var reservoir = reservoirs[index];
+            var centerRadius = reservoir.CenterRadius;
+            var radiiFalloff = reservoir.RadiiFalloff;
+            if (!IsFinite(centerRadius) || !IsFinite(radiiFalloff) || reservoir.WeightTargetCount.Z <= 0.0f)
+            {
+                continue;
+            }
+
+            var centerX = centerRadius.X;
+            var centerY = centerRadius.Y;
+            var radiusX = MathF.Max(MathF.Abs(radiiFalloff.X), MathF.Abs(centerRadius.W));
+            var radiusY = MathF.Max(MathF.Abs(radiiFalloff.Y), MathF.Abs(centerRadius.W));
+            if (radiusX <= 0.0f || radiusY <= 0.0f)
+            {
+                continue;
+            }
+
+            var minX = Math.Clamp((int)MathF.Floor(((centerX - radiusX) - bounds.X) / spanX * width), 0, width - 1);
+            var maxX = Math.Clamp((int)MathF.Ceiling(((centerX + radiusX) - bounds.X) / spanX * width), 0, width - 1);
+            var minY = Math.Clamp((int)MathF.Floor(((centerY - radiusY) - bounds.Y) / spanY * height), 0, height - 1);
+            var maxY = Math.Clamp((int)MathF.Ceiling(((centerY + radiusY) - bounds.Y) / spanY * height), 0, height - 1);
+            if (maxX < minX || maxY < minY)
+            {
+                continue;
+            }
+
+            var targetCount = MathF.Max(reservoir.WeightTargetCount.Y, 1.0f);
+            var confidence = Math.Clamp(reservoir.Validation.X, 0.0f, 1.0f);
+            var baseMass = Math.Clamp((int)MathF.Ceiling(targetCount * MathF.Max(confidence, 0.125f)), 1, 16);
+            for (var y = minY; y <= maxY; y++)
+            {
+                var worldY = bounds.Y + ((y + 0.5f) / height) * spanY;
+                var dy = (worldY - centerY) / radiusY;
+                for (var x = minX; x <= maxX; x++)
+                {
+                    var worldX = bounds.X + ((x + 0.5f) / width) * spanX;
+                    var dx = (worldX - centerX) / radiusX;
+                    var q = (dx * dx) + (dy * dy);
+                    if (q > 1.0f)
+                    {
+                        continue;
+                    }
+
+                    var shaped = 1.0f - q;
+                    var mass = Math.Max(1, (int)MathF.Ceiling(baseMass * shaped * shaped));
+                    var binIndex = (y * width) + x;
+                    bins[binIndex] = bins[binIndex] > int.MaxValue - mass
+                        ? int.MaxValue
+                        : bins[binIndex] + mass;
+                }
+            }
+        }
+
+        return new FractalPointHistogram(width, height, bounds, bins);
+    }
+
+    private static bool IsFinite(Vector4 value)
+    {
+        return float.IsFinite(value.X)
+            && float.IsFinite(value.Y)
+            && float.IsFinite(value.Z)
+            && float.IsFinite(value.W);
+    }
+
     private static VisualParityViewReceipt BuildVisualParityView(
         ReceiptOptions options,
         VisualParityView view,
         FractalPointHistogram referenceHistogram,
-        IReadOnlyList<Vector2> gpuPoints,
-        int width,
-        int height)
+        FractalPointHistogram candidateHistogram)
     {
-        var gpuHistogram = FractalPointHistogramBuilder.Build(gpuPoints, width, height, view.Bounds);
-        WriteVisualParityImages(options, view.Name, referenceHistogram, gpuHistogram);
-        var metrics = CompareHistograms(referenceHistogram, gpuHistogram);
+        WriteVisualParityImages(options, view.Name, referenceHistogram, candidateHistogram);
+        var metrics = CompareHistograms(referenceHistogram, candidateHistogram);
         return new VisualParityViewReceipt(
             view.Name,
             [
@@ -554,7 +657,7 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
                 view.Bounds.W,
             ],
             referenceHistogram.HitCount,
-            gpuHistogram.HitCount,
+            candidateHistogram.HitCount,
             metrics.ReferenceOccupiedBins,
             metrics.GpuOccupiedBins,
             metrics.SharedOccupiedBins,
@@ -1155,6 +1258,7 @@ internal readonly record struct ReferenceDensityImage(
 
 internal sealed record VisualParityReceipt(
     string ReferenceSource,
+    string CandidateSource,
     int ComparedSamples,
     long ReferenceSamples,
     int Width,

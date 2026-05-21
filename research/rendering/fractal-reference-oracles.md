@@ -194,10 +194,24 @@ The first post-oracle correction found two concrete import/math lies:
   `atan2(y, x) / PI`.
 
 After fixing both, the same external-density receipt scored `26.87%` at
-`256x256` bounds `-2,-2,2,2`, up from `15.33%`. The remaining visible
-"explosion" is no longer just orbit math. Aquarium is still scoring raw splat
-positions as equal mass, while FARender's image is camera-mapped, filtered,
-gamma/brightness processed, and effectively drops sparse low-density outliers.
+`256x256` bounds `-2,-2,2,2`, up from `15.33%`.
+
+The parity candidate no longer bins raw splat occupancy. That was the wrong
+organ. The GPU receipt now builds the Aquarium comparison image from the SDF
+envelope reservoir layer by stamping each populated envelope into a shaped
+density histogram. PBR and radiosity reservoirs stay separate; PBR will score
+surface appearance later, and radiosity is not part of this flame-density gate
+yet. With full SDF reservoir coverage on the local GTX 1070, the same
+`julian-disc-baby` receipt scored `22.14%` against the FARender PPM at
+`256x256` bounds `-2,-2,2,2`, with `42.053 ms/frame` while refreshing all
+2,000,000 reservoir rows in all three layers. The contact sheet lives at
+`artifacts/fractal-flame-jwildfire-reference/julian-disc-baby-sdf-density-contact.png`.
+
+The remaining visible mismatch is now the right mismatch: Aquarium's SDF
+reservoir density is sparse and shape-shifted relative to FARender's rendered
+density. Fixing that belongs in dialect import, camera/render-filter parity,
+target density weighting, and view-conditioned reservoir feedback, not in
+pretending point occupancy is a rendered form.
 The next oracle step is to compare Aquarium through a matching density image
 resolve, not raw point occupancy.
 
