@@ -1,4 +1,4 @@
-# Temporal SDF Gaussian Field
+# Temporal Field Gaussian
 
 ## Objective
 
@@ -7,6 +7,11 @@ clients provide stable world-space Gaussian observations, and the engine turns
 them into a buffered, reprojectable, D3D12-rendered field. LocalCastBridge can
 then feed sensor-fusion output into Aquarium as a normal scene contract instead
 of smuggling renderer policy through client code.
+
+The historical `SDF` name is now backend baggage. This contract is a temporal
+Form-field path: opaque producers may resolve to SDF/level-set surfaces, while
+flames, smoke, transparent gradients, and sensor fusion may stay as
+density/extinction/confidence fields until evidence justifies a surface.
 
 ## Current Mechanism
 
@@ -28,9 +33,10 @@ policy:
 - history weight is confidence scaled by age inside the window
 
 The Gaussian field is one backend for this reservoir, not the reservoir's
-identity. Fractal SDF probes, visual point-cloud features, and future acoustic
-constraints can all enter as stable keyed spatial evidence as long as each
-producer declares confidence, time, bounds, and payload lowering rules.
+identity. Fractal form probes, visual point-cloud features, transparent density
+samples, and future acoustic constraints can all enter as stable keyed spatial
+evidence as long as each producer declares confidence, time, bounds, field
+layer, field encoding, and payload lowering rules.
 `TemporalSpatialEvidenceLowering` owns the current packet conversions for
 `TemporalGaussianObservation`, `AquariumTemporalSdfGaussian`, and
 `AquariumGpuFusionSeed`; consumers should use those helpers instead of packing
@@ -70,6 +76,9 @@ instead of a scrapbook with a power cord.
   backend output and do not invent identity.
 - The compact support kernel has a finite bound. Renderer cost must scale from
   declared bounds, not from infinite translucent fog.
+- Density/opacity observations are not required to become surfaces. A
+  transparent medium may remain a participating Form field with Appearance and
+  Transport payloads instead of being collapsed into a fake SDF.
 - Client code may construct observations or a field for diagnostics, but
   Aquarium owns live sensor texture import, packet layout, root binding, shader
   evaluation, fusion, and temporal-control metadata.

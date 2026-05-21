@@ -4,8 +4,8 @@
 
 Aquarium owns the shared temporal evidence machine for two customers:
 
-- fractal rendering, where SDF/detail/path candidates need bounded reuse across
-  pixels, frames, and nested domains;
+- fractal rendering, where Form/Appearance/Transport candidates need bounded
+  reuse across pixels, frames, and nested domains;
 - Mimir/LocalCast sensor fusion, where camera and microphone features need a
   delayed coherence window before the resolved field is rendered.
 
@@ -64,18 +64,26 @@ producer observations
 - final contribution weight `weightSum / (candidateCount * selectedTarget)`.
 
 Candidate generators own proposal distributions. A fractal renderer may propose
-SDF probe candidates from projected error, node bounds, blue-noise screen tiles,
-or resident children. Mimir may propose visual/audio feature candidates from
-sensor confidence and calibration state. The reservoir does not know these
+form probe candidates from projected error, node bounds, blue-noise screen
+tiles, or resident children. Mimir may propose visual/audio feature candidates
+from sensor confidence and calibration state. The reservoir does not know these
 domains; it only receives target and source-PDF values.
+
+Every evidence sample should state its layer and encoding before lowering:
+Form, Appearance, or Transport; then SDF, height, density, extinction,
+material, phase, emission, radiance, feature, or confidence as appropriate.
+Opaque worlds can promote Form evidence into SDF surfaces. Flames and uncertain
+sensor fields may remain density/extinction/confidence volumes. That is not a
+failure to find the surface; it is the correct field.
 
 Reuse passes own validity and shift mapping. A sample may be reused only when
 the target domain can explain it. For pixels this means depth/normal/material
 compatibility, motion vectors, conservative visibility, and disocclusion tests.
 For fractal domains it means matching domain ancestry, bounded local-frame
-error, resident payload compatibility, and conservative SDF bounds. For sensor
-fusion it means time delay, calibration confidence, modality agreement, and
-feature reprojection error.
+error, resident payload compatibility, conservative surface bounds for SDF
+encodings, and conservative support/extinction bounds for density encodings.
+For sensor fusion it means time delay, calibration confidence, modality
+agreement, and feature reprojection error.
 
 `TemporalSpatialEvidenceReservoir` owns stable resolved spatial tracks after
 candidate selection when the output is a field with persistent identity:
@@ -103,7 +111,7 @@ but it does not own producer identity or stable spatial evidence.
 - Reuse is invalid until a pass proves the shift/validation contract for the
   source and target domains.
 - Conservative bounds remain the safety authority. Learned or stochastic
-  priority may decide what to refresh first; it must not replace SDF bounds,
+  priority may decide what to refresh first; it must not replace field bounds,
   visibility bounds, or calibration bounds.
 - CPU, GPU, RAM, and SSD budgets are inputs to candidate generation and
   residency. They are not hidden side effects of renderer convenience code.
@@ -124,7 +132,7 @@ Built:
   frames scheduled update nodes as weighted reservoir candidates with a
   per-frame reservoir snapshot for debug and tests. It is the candidate source,
   not the full temporal/spatial reuse pass.
-- `FractalProbeSample` is the first typed fractal SDF/detail sample shape for
+- `FractalProbeSample` is the first typed fractal form/detail sample shape for
   the ReSTIR/GRIS path. It carries domain key, node key, local center, bound
   radius, target contribution, source PDF, material delta, and payload handle.
   `FractalProbeReuseValidator` currently proves domain lineage and local-shift
@@ -134,7 +142,7 @@ Built:
 Not built yet:
 
 - GPU reservoir buffers;
-- camera/disocclusion/material validation for fractal/SDF reservoirs;
+- camera/disocclusion/material validation for fractal form/appearance reservoirs;
 - spatial neighbor reuse across screen tiles and cube-sphere neighbor domains;
 - GRIS-style domain shift mappings for nested `.aquageo` domains;
 - expanded TAA guide-buffer storage for previous-frame reservoir confidence,
@@ -154,26 +162,28 @@ z: domain validity
 w: invalidation code
 ```
 
-The first live producers are SDF surfaces and temporal Gaussian splats. Resolve
-reads the current and previous guide textures, folds confidence and domain
-validity into history validation, then writes the next history guide. Future
-ReSTIR/GRIS passes should extend the producer side of this schema rather than
-packing more reservoir folklore into scene-control channels.
+The first live producers are SDF surfaces and temporal Gaussian splats, but the
+schema is not surface-only. Resolve reads the current and previous guide
+textures, folds confidence and domain validity into history validation, then
+writes the next history guide. Future ReSTIR/GRIS passes should extend the
+producer side of this schema with explicit Form/Appearance/Transport fields
+rather than packing more reservoir folklore into scene-control channels.
 
 ## Implementation Roadmap
 
 1. Keep the CPU reservoir core pure and exhaustive under unit tests.
-2. Add typed reservoir samples for fractal SDF probes: domain key, local frame,
-   bound radius, target contribution, source PDF, payload handle, and material
-   delta.
+2. Add typed reservoir samples for fractal field probes: domain key, local
+   frame, bound radius, target contribution, source PDF, layer/encoding, payload
+   handle, and material or transport delta.
 3. Turn `FractalContributionCache` into a candidate generator that refreshes
    nodes under CPU budget and submits candidates to the reservoir core.
 4. Add temporal reuse for fractal probes using camera motion, domain ancestry,
    local-frame error, and conservative bounds.
 5. Add spatial reuse across screen tiles and quadtree neighbors.
-6. Lower selected reservoirs into GPU brush/SDF packets and expose debug views
-   for weight sum, selected target, candidate count, confidence, age, and
-   invalidation reason.
+6. Lower selected reservoirs into GPU field packets. SDF packets are the solid
+   surface encoding; density/extinction packets are the transparent/sensor
+   volume encoding. Expose debug views for weight sum, selected target,
+   candidate count, confidence, age, and invalidation reason.
 7. Weave reservoir confidence and temporal detail into TAA guide buffers so the
    history filter can distinguish stable reused evidence from fresh stochastic
    noise. The first pass uses current scene-control.w for reservoir confidence

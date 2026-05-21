@@ -4,8 +4,11 @@
 
 Build one real-time spatial evidence machine that can render and resolve:
 
-- fast 2D SDF splats on tileable surfaces;
-- fast 3D SDF splats in object/world volumes;
+- fast 2D scalar-field splats on tileable surfaces;
+- fast 3D scalar-field splats in object/world volumes;
+- SDF/level-set surfaces for opaque solids;
+- density/extinction fields for flames, smoke, fog, plasma, and uncertain
+  sensor volumes;
 - 2D fields projected onto 3D domains such as cube-sphere planets and toroidal
   station decks;
 - camera/microphone sensor evidence from Mimir-style capture;
@@ -44,7 +47,7 @@ This architecture is not invented from the floorboards:
 - Every reusable sample must name its target function and source PDF or state
   why it is non-probabilistic structural evidence.
 - Every LOD subtree has a conservative parent summary.
-- Learned/stochastic priority may rank work; it may not own SDF safety,
+- Learned/stochastic priority may rank work; it may not own field safety,
   visibility safety, or calibration safety.
 - Missing children render through parent summaries. A frame does not wait for
   SSD.
@@ -65,7 +68,7 @@ Authored intent or live sensor input
 -> Occupancy graph update
 -> Residency/page scheduling
 -> Backend packet lowering
--> 2D/3D/projected SDF splat passes
+-> 2D/3D/projected field splat passes
 -> Temporal resolve guide buffers
 -> Debug/evidence telemetry
 ```
@@ -90,8 +93,8 @@ Aquarium.Engine.SensorFusion
   confidence, raw retention lowerings, Mimir-facing packet contracts.
 
 Aquarium.Engine.Render
-  D3D12 resources, page tables, structured buffers, splat/SDF passes, TAA guide
-  buffers, debug visualization.
+  D3D12 resources, page tables, structured buffers, field splat passes,
+  surface/volume resolves, TAA guide buffers, debug visualization.
 
 Aquarium.Zyphos
   World policy, cube-sphere/tile roots, planet grammar seeds, setting-safe
@@ -129,7 +132,8 @@ allowed to be 2D, 3D, or 2D projected onto 3D.
 ClaimKey
 DomainKey
 NodeKey
-Kind: height/material/sdf2d/sdf3d/void/light/feature/confidence
+Layer: form/appearance/transport
+Kind: height/sdf2d/sdf3d/density/extinction/material/phase/emission/light/feature/confidence
 LocalFrame
 Envelope
 Payload
@@ -140,6 +144,45 @@ Seed
 
 Claims are authored or inferred statements about a field. They are not renderer
 packets.
+
+### Field Layer Split
+
+The old shorthand was `SDF / PBR / Radiosity`. That naming was useful for the
+first opaque-object path, but it is not the architecture.
+
+The durable split is:
+
+```text
+Form       -> what exists where
+Appearance -> how it interacts locally with light, color, and material
+Transport  -> how energy moves through or from it
+```
+
+Opaque solids lower through level-set form:
+
+```text
+phi(x) = signed distance
+gradient(phi) = surface normal
+surface exists near phi = 0
+```
+
+Transparent media lower through density/extinction form:
+
+```text
+rho(x) = density / extinction / confidence
+gradient(rho) = direction of local density change
+volume exists where rho contributes above threshold
+```
+
+Sensor fusion may begin as confidence density and sharpen into surface claims
+when multi-view/acoustic evidence makes a stable boundary plausible. Fractal
+terrain may begin as SDF/height surfaces. Flames stay participating fields:
+their form is density/extinction, their appearance is emission/color/phase, and
+their transport is emission/scattering reuse.
+
+Implementation note: current packet names still say SDF/PBR/radiosity in places
+because the first GPU receipt was built for opaque splats. Treat those as
+backend packet names, not the conceptual contract.
 
 ### Probe
 
@@ -156,6 +199,8 @@ Confidence
 ObservedFrame
 ObservedTime
 ProducerKind
+FieldLayer
+FieldEncoding
 ```
 
 A structural probe can come from an IFS grammar. A sensor probe can come from a
@@ -255,7 +300,9 @@ history after lowering.
 Targets are comparable scalar contributions:
 
 - projected SDF/form error;
-- material delta over visible coverage;
+- density/extinction contribution;
+- appearance delta over visible coverage;
+- transport/radiance contribution;
 - feature confidence times calibration confidence;
 - expected pixel influence;
 - expected information gain for an uncertain region.
@@ -344,13 +391,16 @@ The same semantic field can lower to:
 - 2D SDF tile pages;
 - 2D height/material pages;
 - 3D SDF splat packets;
+- 3D density/extinction splat packets;
+- transparent emission/scattering splat packets;
 - 2D-projected-to-3D splat packets;
 - sensor confidence volumes;
 - debug overlays.
 
 The first renderer path should use compact-support anisotropic envelopes. They
 borrow Gaussian splatting's covariance discipline without inheriting infinite
-support as a default runtime tax.
+support as a default runtime tax. Surface and volume encodings may share the
+same envelope math; they do not share resolve rules.
 
 ### 10. TAA Guide Integration
 
@@ -386,9 +436,9 @@ pending.
 
 ### GPU
 
-GPU evaluates selected packets, splats, SDF proxy passes, compute scoring where
-profitable, page-table sampling, and debug views. It must not walk the authored
-grammar tree.
+GPU evaluates selected packets, splats, SDF proxy passes, density/transparent
+volume passes, compute scoring where profitable, page-table sampling, and debug
+views. It must not walk the authored grammar tree.
 
 ## Render Frame Flow
 
@@ -403,8 +453,8 @@ grammar tree.
 8. Update occupancy graph statistics.
 9. Select hierarchy cut under CPU/GPU/RAM/SSD budgets.
 10. Queue missing pages; keep parent summaries active.
-11. Lower selected evidence to 2D/3D/projected SDF splat packets.
-12. Render splat/SDF passes.
+11. Lower selected evidence to 2D/3D/projected field splat packets.
+12. Render surface and/or transparent field passes.
 13. Resolve with TAA guide buffers.
 14. Emit debug telemetry and evidence logs.
 ```
@@ -506,9 +556,9 @@ payloads by score-per-cost and emits eviction decisions for low-value expensive
 payloads. Convergence telemetry and richer resource-tier residency fields remain
 open.
 
-### Phase E: 2D SDF Tile Backend
+### Phase E: 2D Surface Field Tile Backend
 
-Build cached 2D SDF/height/material pages for cube-sphere and torus domains.
+Build cached 2D SDF/height/material/confidence pages for cube-sphere and torus domains.
 Use parent summaries while child pages stream.
 
 Current state: `AquariumFractalSurfacePageKey` and
@@ -523,10 +573,12 @@ pages to CPU height, 2D signed-distance support, material, and confidence
 sample payloads using the same shaped brush envelope math as the live brush
 compiler. The real page store, atlas, and D3D12 lowering remain open.
 
-### Phase F: 3D SDF Splat Backend
+### Phase F: 3D Form Field Splat Backend
 
-Build compact-support 3D SDF splat packets for object/volume domains. Keep
-distance safety conservative and LOD gated.
+Build compact-support 3D form splat packets for object/volume domains. Opaque
+solids use SDF/level-set packets; transparent media use density/extinction
+packets. Keep distance safety conservative and LOD gated for solids, and keep
+volume cost bounded by explicit extinction/support budgets.
 
 Current state: `AquariumFractalSdfSplat3DKey` and
 `AquariumFractalSdfSplat3D` define stable compact-support 3D SDF splat packets.
@@ -534,12 +586,14 @@ Current state: `AquariumFractalSdfSplat3DKey` and
 `FractalSdfSplat3DKernel` provides CPU compact-weight and signed-distance
 parity math. Zyphos now exposes a first structural SDF splat from its probe
 reservoir. D3D12 lowering and object/body recursive form integration remain
-open.
+open. Volume form packets are not implemented yet; flames are the current
+pressure proving that SDF packet naming is too narrow.
 
-### Phase G: 2D-Projected-To-3D Backend
+### Phase G: 2D-Projected-To-3D Field Backend
 
-Project 2D SDF tile pages onto 3D domains: cube-sphere planets, torus stations,
-curved sheets, and object-local surfaces.
+Project 2D field pages onto 3D domains: cube-sphere planets, torus stations,
+curved sheets, object-local surfaces, and transparent sheets/volumes when the
+domain mapping supports them.
 
 Current state: `FractalProjectedSdfSplatCompiler` lowers resident
 `SignedDistance2D` page payloads into compact 3D SDF splats through an explicit
@@ -551,7 +605,9 @@ mapping; real cube-sphere and torus mappings remain open.
 
 Add sensor candidate adapters after the fractal reservoir path proves the
 contract. Camera/audio features become candidates; Aquarium owns resolved
-evidence.
+evidence. Sensor fusion initially emits confidence/density form claims; only
+coherent gradients and multi-view/acoustic agreement should promote them into
+surface claims.
 
 ### Phase I: GPU Reservoirs And Spatial Reuse
 
@@ -561,16 +617,20 @@ domain neighbors, and keep CPU/GPU parity fixtures.
 Current state: `tools/Aquarium.Fractal.Receipt` is the first GPU-resident
 receipt harness. It allocates an 80-byte packed SDF splat UAV plus three
 separate 64-byte reservoir UAVs for SDF envelopes, PBR material envelopes, and
-radiosity. The receipt runs independent D3D12 compute passes for splat
-population, SDF reservoir sampling, PBR reservoir sampling, and radiosity
-reservoir sampling; the three reservoir passes share only the stochastic update
-budget vocabulary, not packet anatomy. On the local GTX 1070, the budgeted
-receipt kept `2,000,000` splats and `2,000,000` reservoirs per layer resident,
-updated `50,000` entries per reservoir layer per frame with two candidates per
-update, and measured `4.471 ms/frame`, `223.7 FPS` equivalent over `120`
-frames. This proves compute-side GPU residency and budgeted temporal
-convergence for the layered cache; final shaded visibility still has to consume
-the same packed buffers.
+radiosity because that was the first opaque-object packet slice. Conceptually
+those are the first Form, Appearance, and Transport reservoirs. The receipt
+runs independent D3D12 compute passes for splat population, form/SDF reservoir
+sampling, appearance/PBR reservoir sampling, and transport/radiosity reservoir
+sampling; the three reservoir passes share only the stochastic update budget
+vocabulary, not packet anatomy. On the local GTX 1070, the budgeted receipt
+kept `2,000,000` splats and `2,000,000` reservoirs per layer resident, updated
+`50,000` entries per reservoir layer per frame with two candidates per update,
+and measured `4.471 ms/frame`, `223.7 FPS` equivalent over `120` frames. This
+proves compute-side GPU residency and budgeted temporal convergence for the
+layered cache; final shaded visibility still has to consume the same packed
+buffers. Next packet evolution should add density/extinction Form rows and
+participating-medium Appearance/Transport rows instead of forcing flames through
+opaque SDF/PBR semantics.
 
 ### Phase J: Learned Priority Gate
 

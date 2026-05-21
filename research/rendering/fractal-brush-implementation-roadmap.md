@@ -31,7 +31,7 @@ debug visibility.
 - Backend packets are compiled output and may be replaced.
 - Every domain, node, claim, and payload has a stable key.
 - Every LOD subtree has a conservative parent summary.
-- The cache may learn priority; it may not own SDF safety.
+- The cache may learn priority; it may not own field safety.
 - Missing children render through parent summaries instead of stalling.
 - Debug views are required before recursive detail density increases.
 - Each module owns one invariant and exposes a mockable seam.
@@ -84,7 +84,7 @@ Owns D3D12 lowering:
 - GPU buffers;
 - descriptor binding;
 - shader packet decode;
-- height/material/SDF backend passes;
+- height/material/Form/Appearance/Transport backend passes;
 - debug visualizations.
 
 Tests:
@@ -112,7 +112,7 @@ Add these before the modules need them:
 - `IFractalClock`: deterministic frame/time.
 - `IFractalRandom`: deterministic update lottery.
 - `IProjection`: projection candidate swap.
-- `IContributionProbe`: observed pixel/material/SDF delta.
+- `IContributionProbe`: observed pixel/form/appearance/transport delta.
 - `IFractalPayloadStore`: fake RAM/SSD payload availability.
 - `IFractalGpuBudget`: fake GPU table/page limits.
 - `IFractalDebugSink`: telemetry capture without UI.
@@ -542,17 +542,20 @@ Tasks:
   that genuinely need C# memory.
 - [x] Add D3D12 compute receipt harness that writes millions of splats directly
   into a GPU-resident UAV.
-- [x] Add distinct GPU reservoir packet contracts for SDF envelopes, PBR
-  material envelopes, and radiosity.
-- [x] Sample those three reservoir types in independent compute passes under a
+- [x] Add distinct GPU reservoir packet contracts for the first opaque slice:
+  SDF envelopes, PBR material envelopes, and radiosity. These are backend packet
+  names for Form, Appearance, and Transport, not the permanent conceptual
+  architecture.
+- [x] Sample those three reservoir layers in independent compute passes under a
   stochastic per-frame update budget.
 - [x] Measure with GPU timestamp queries and read back only a tiny checksum
   sample.
 
 Receipt:
 
-- GTX 1070, `2,000,000` splats, `2,000,000` SDF reservoirs,
-  `2,000,000` PBR reservoirs, and `2,000,000` radiosity reservoirs.
+- GTX 1070, `2,000,000` splats, `2,000,000` SDF/Form reservoirs,
+  `2,000,000` PBR/Appearance reservoirs, and `2,000,000`
+  radiosity/Transport reservoirs.
 - Packet sizes: `80` bytes/splat, `64` bytes/reservoir.
 - Budget: `50,000` updates per reservoir pass per frame, `2`
   candidates/update, full reservoir coverage in `40` frames.
@@ -571,6 +574,10 @@ Cut line:
 - This is compute-side population and cache-update throughput, not final shaded
   visibility. Do not sell it as renderer completion until the
   draw/raster/resolve path consumes the same packed buffers.
+- The next coherent packet evolution is density/extinction Form plus
+  participating-medium Appearance/Transport. Do not force flames or sensor
+  confidence volumes through solid SDF semantics just because the first packet
+  names said SDF.
 
 ## First Work Packet
 
