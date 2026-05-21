@@ -46,6 +46,8 @@ public enum AquariumFractalPayloadKind
     Height,
     Material,
     SignedDistance,
+    Density,
+    Extinction,
 }
 
 public enum AquariumFieldLayer

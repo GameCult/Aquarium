@@ -588,8 +588,12 @@ evidence without creating a second cache. `AquariumFractalSdfSplat3D` and
 `AquariumFractalDensitySplat3D` and `FractalDensitySplat3DCompiler` own the
 transparent density/extinction lowering path. Reuse rejects mismatched
 encodings before lineage/local-shift reuse can smear density and SDF together.
-Zyphos now exposes a first structural SDF splat from its probe reservoir. D3D12
-lowering and object/body recursive form integration remain open.
+The `.aquageo` DSL accepts `density` and `extinction` claims beside `height`,
+and its `flame` recursive primitive now emits density claims instead of height
+claims. Height brush lowering filters to height payloads, leaving transparent
+Form claims for field lowering. Zyphos now exposes a first structural SDF splat
+from its probe reservoir. D3D12 lowering and object/body recursive form
+integration remain open.
 
 ### Phase G: 2D-Projected-To-3D Field Backend
 

@@ -29,19 +29,38 @@ public sealed class FractalSummaryBuilderTests
         Assert.Equal(2, summaries[0].DescendantCount);
     }
 
+    [Fact]
+    public void SummaryTreatsDensityAndExtinctionAsFormContribution()
+    {
+        var domainKey = new AquariumFractalKey("domain/volume");
+        var rootKey = new AquariumFractalKey("domain/volume/root");
+        var domain = new AquariumFractalDomain(domainKey, AquariumFractalDomainKind.Object3D, default, Vector4.Zero, Vector4.Zero);
+        var claims = new[]
+        {
+            Claim("claim/density", domainKey, rootKey, Vector2.Zero, Vector2.One, 0.5f, AquariumFractalPayloadKind.Density),
+            Claim("claim/extinction", domainKey, rootKey, new Vector2(3.0f, 0.0f), new Vector2(2.0f, 1.0f), 1.25f, AquariumFractalPayloadKind.Extinction),
+        };
+        var tree = FractalOwnershipTreeBuilder.BuildFlatUnion(domain, rootKey, claims);
+
+        var summary = Assert.Single(FractalSummaryBuilder.Build(tree));
+
+        Assert.Equal(1.75f, summary.MaxHeightError);
+    }
+
     private static AquariumBrushClaim Claim(
         string key,
         AquariumFractalKey domainKey,
         AquariumFractalKey nodeKey,
         Vector2 center,
         Vector2 radii,
-        float amplitude)
+        float amplitude,
+        AquariumFractalPayloadKind payloadKind = AquariumFractalPayloadKind.Height)
     {
         return new AquariumBrushClaim(
             new AquariumFractalKey(key),
             domainKey,
             nodeKey,
-            AquariumFractalPayloadKind.Height,
+            payloadKind,
             center,
             radii,
             RotationRadians: 0.0f,

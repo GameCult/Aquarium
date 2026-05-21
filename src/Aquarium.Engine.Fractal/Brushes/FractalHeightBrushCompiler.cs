@@ -58,15 +58,20 @@ public static class FractalHeightBrushCompiler
         ArgumentNullException.ThrowIfNull(tree);
 
         var domains = tree.Domains.ToDictionary(domain => domain.Key, domain => domain);
-        var brushes = new AquariumHeightFieldBrush[tree.Claims.Count];
+        var brushes = new List<AquariumHeightFieldBrush>();
         for (var index = 0; index < tree.Claims.Count; index++)
         {
             var claim = tree.Claims[index];
+            if (claim.PayloadKind != AquariumFractalPayloadKind.Height)
+            {
+                continue;
+            }
+
             domains.TryGetValue(claim.DomainKey, out var domain);
-            brushes[index] = Compile(claim, domain);
+            brushes.Add(Compile(claim, domain));
         }
 
-        return brushes;
+        return brushes.ToArray();
     }
 
     public static AquariumHeightFieldBrush[] CompileSelectedTree(FractalOwnershipTree tree, IReadOnlyList<AquariumSelectedCut> selectedCut)
@@ -87,6 +92,11 @@ public static class FractalHeightBrushCompiler
             for (var claimIndex = node.FirstClaimIndex; claimIndex < node.FirstClaimIndex + node.ClaimCount; claimIndex++)
             {
                 var claim = tree.Claims[claimIndex];
+                if (claim.PayloadKind != AquariumFractalPayloadKind.Height)
+                {
+                    continue;
+                }
+
                 domains.TryGetValue(claim.DomainKey, out var domain);
                 brushes.Add(Compile(claim, domain));
             }

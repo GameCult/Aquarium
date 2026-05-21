@@ -91,6 +91,22 @@ public sealed class FractalHeightBrushCompilerTests
     }
 
     [Fact]
+    public void TreeCompileSkipsTransparentFormClaims()
+    {
+        const string source = """
+            tile PositiveZ 0 0 0 demo/field
+            height basin 0 0 30 30 0 3 1 -0.18 7 basin
+            density smoke 0 0 4 4 0 3 1 0.75 13 smoke
+            extinction ash 1 1 2 2 0 3 1 0.35 17 ash
+            """;
+        var tree = FractalDslCompiler.Compile(source);
+
+        var brush = Assert.Single(FractalHeightBrushCompiler.CompileTree(tree));
+
+        Assert.Equal(-0.18f, brush.Amplitude);
+    }
+
+    [Fact]
     public void SelectedTreeCompileOnlyLowersSelectedNodes()
     {
         const string source = """
@@ -98,6 +114,7 @@ public sealed class FractalHeightBrushCompilerTests
             height basin 0 0 30 30 0 3 1 -0.18 7 basin
             tile PositiveX 0 0 0 demo/b
             height ridge 1 1 4 2 0 3 1 0.08 11 ridge
+            density smoke 1 1 4 2 0 3 1 0.8 19 smoke
             """;
         var tree = FractalDslCompiler.Compile(source);
         var selectedNode = Assert.Single(tree.Nodes, node => node.DomainKey.Value.EndsWith(":demo/b", StringComparison.Ordinal));

@@ -80,11 +80,13 @@ public static class FractalDslCompiler
                         ParsePositiveFloat(tokens[8], lineIndex)));
                     break;
                 case "height":
+                case "density":
+                case "extinction":
                     EnsureDomain(domain, lineIndex);
                     EnsureNode(currentNode, lineIndex);
                     EnsureTokenCount(tokens, 12, lineIndex);
-                    var heightDomain = domain!.Value;
-                    claims.Add(ParseHeight(tokens, heightDomain.Key, currentNode!.Key, lineIndex, claims.Count - currentNode.FirstClaimIndex));
+                    var fieldDomain = domain!.Value;
+                    claims.Add(ParseFieldClaim(tokens, fieldDomain.Key, currentNode!.Key, lineIndex, claims.Count - currentNode.FirstClaimIndex));
                     currentNode.ClaimCount++;
                     break;
                 case "ifs":
@@ -140,10 +142,11 @@ public static class FractalDslCompiler
             new Vector4(parameters[4], parameters[5], parameters[6], parameters[7]));
     }
 
-    private static AquariumBrushClaim ParseHeight(string[] tokens, AquariumFractalKey domainKey, AquariumFractalKey nodeKey, int lineIndex, int claimIndex)
+    private static AquariumBrushClaim ParseFieldClaim(string[] tokens, AquariumFractalKey domainKey, AquariumFractalKey nodeKey, int lineIndex, int claimIndex)
     {
         var name = tokens[1];
-        return HeightClaim(
+        return FieldClaim(
+            ParsePayloadKind(tokens[0], lineIndex),
             domainKey,
             nodeKey,
             name,
@@ -156,6 +159,17 @@ public static class FractalDslCompiler
             ParseFloat(tokens[9], lineIndex),
             ParseInt(tokens[10], lineIndex),
             tokens[11]);
+    }
+
+    private static AquariumFractalPayloadKind ParsePayloadKind(string token, int lineIndex)
+    {
+        return token switch
+        {
+            "height" => AquariumFractalPayloadKind.Height,
+            "density" => AquariumFractalPayloadKind.Density,
+            "extinction" => AquariumFractalPayloadKind.Extinction,
+            _ => throw new FormatException($"Invalid field payload `{token}` at line {lineIndex + 1}."),
+        };
     }
 
     private static void AddIfsClaims(string[] tokens, AquariumFractalKey domainKey, AquariumFractalKey nodeKey, int lineIndex, List<AquariumBrushClaim> claims)
@@ -225,7 +239,7 @@ public static class FractalDslCompiler
         List<AquariumBrushClaim> claims)
     {
         var level = claims.Count;
-        claims.Add(HeightClaim(domainKey, nodeKey, $"{name}/{level}", claims.Count, center, radii, rotationStep * level, falloff, shapePower, amplitude, seed + level, tags));
+        claims.Add(FieldClaim(AquariumFractalPayloadKind.Height, domainKey, nodeKey, $"{name}/{level}", claims.Count, center, radii, rotationStep * level, falloff, shapePower, amplitude, seed + level, tags));
 
         if (levelsRemaining <= 1)
         {
@@ -278,7 +292,7 @@ public static class FractalDslCompiler
     {
         var level = claims.Count;
         var rotation = spiralAngle + curl * level;
-        claims.Add(HeightClaim(domainKey, nodeKey, $"{name}/{level}", claims.Count, center, radii, rotation, falloff, shapePower, amplitude, seed + level, tags));
+        claims.Add(FieldClaim(AquariumFractalPayloadKind.Density, domainKey, nodeKey, $"{name}/{level}", claims.Count, center, radii, rotation, falloff, shapePower, amplitude, seed + level, tags));
 
         if (levelsRemaining <= 1)
         {
@@ -313,7 +327,8 @@ public static class FractalDslCompiler
         }
     }
 
-    private static AquariumBrushClaim HeightClaim(
+    private static AquariumBrushClaim FieldClaim(
+        AquariumFractalPayloadKind payloadKind,
         AquariumFractalKey domainKey,
         AquariumFractalKey nodeKey,
         string name,
@@ -331,7 +346,7 @@ public static class FractalDslCompiler
             FractalStableKeyBuilder.Child(nodeKey, $"claim/{claimIndex:0000}/{name}"),
             domainKey,
             nodeKey,
-            AquariumFractalPayloadKind.Height,
+            payloadKind,
             center,
             radii,
             rotationRadians,

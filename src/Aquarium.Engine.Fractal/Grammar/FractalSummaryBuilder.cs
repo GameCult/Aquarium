@@ -17,7 +17,7 @@ public static class FractalSummaryBuilder
             for (var claimIndex = node.FirstClaimIndex; claimIndex < node.FirstClaimIndex + node.ClaimCount; claimIndex++)
             {
                 var claim = tree.Claims[claimIndex];
-                if (claim.PayloadKind == AquariumFractalPayloadKind.Height)
+                if (IsFormPayload(claim.PayloadKind))
                 {
                     maxHeightError += MathF.Abs(claim.Amplitude);
                 }
@@ -35,5 +35,13 @@ public static class FractalSummaryBuilder
         }
 
         return summaries;
+    }
+
+    private static bool IsFormPayload(AquariumFractalPayloadKind kind)
+    {
+        return kind is AquariumFractalPayloadKind.Height
+            or AquariumFractalPayloadKind.SignedDistance
+            or AquariumFractalPayloadKind.Density
+            or AquariumFractalPayloadKind.Extinction;
     }
 }

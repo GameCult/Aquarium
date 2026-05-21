@@ -76,10 +76,29 @@ public sealed class FractalDslCompilerTests
 
         Assert.Equal(7, first.Claims.Count);
         Assert.Equal(first.Claims, second.Claims);
+        Assert.All(first.Claims, claim => Assert.Equal(AquariumFractalPayloadKind.Density, claim.PayloadKind));
         Assert.All(first.Claims, claim => Assert.Equal("flame", claim.Tags));
         Assert.True(first.Claims[1].Radii.X < first.Claims[0].Radii.X);
         Assert.NotEqual(first.Claims[1].Center, first.Claims[2].Center);
         Assert.NotEqual(first.Claims[0].RotationRadians, first.Claims[1].RotationRadians);
+    }
+
+    [Fact]
+    public void DslCompilesDensityAndExtinctionClaimsIntoSemanticTree()
+    {
+        const string source = """
+            tile PositiveZ 0 0 0 zyphos/flame
+            density smoke 0 0 4 2 0.2 3 1 0.75 31 smoke
+            extinction ash 1 1 2 2 0.4 5 0.8 0.35 37 ash
+            """;
+
+        var tree = FractalDslCompiler.Compile(source);
+
+        Assert.Equal(2, tree.Claims.Count);
+        Assert.Equal(AquariumFractalPayloadKind.Density, tree.Claims[0].PayloadKind);
+        Assert.Equal(AquariumFractalPayloadKind.Extinction, tree.Claims[1].PayloadKind);
+        Assert.Equal(0.75f, tree.Claims[0].Amplitude);
+        Assert.Equal(0.35f, tree.Claims[1].Amplitude);
     }
 
     [Fact]

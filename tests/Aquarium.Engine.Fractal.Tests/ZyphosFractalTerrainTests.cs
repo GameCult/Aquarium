@@ -25,7 +25,8 @@ public sealed class ZyphosFractalTerrainTests
         Assert.Equal(new AquariumFractalKey("umbros/pebble-field"), tree.Domain.ParentKey);
         Assert.Equal(7, tree.Nodes.Count);
         Assert.Equal(61, tree.Claims.Count);
-        Assert.Equal(tree.Claims.Count, brushes.Length);
+        Assert.Equal(tree.Claims.Count(claim => claim.PayloadKind == AquariumFractalPayloadKind.Height), brushes.Length);
+        Assert.Contains(tree.Claims, claim => claim.PayloadKind == AquariumFractalPayloadKind.Density && claim.Tags == "flame-leaf");
         Assert.Contains(tree.Claims, claim => claim.Tags == "crater");
         Assert.Contains(tree.Claims, claim => claim.Tags == "ridge");
         Assert.Contains(tree.Claims, claim => claim.Tags == "shard");
