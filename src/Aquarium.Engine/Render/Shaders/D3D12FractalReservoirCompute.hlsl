@@ -191,7 +191,7 @@ float3 FractalPoint(uint index, out float radius)
             float disc = transform.tileAddress.x;
             if (disc != 0.0)
             {
-                float discTheta = disc * theta / 3.14159265358979323846;
+                float discTheta = disc * atan2(affine.x, affine.y) / 3.14159265358979323846;
                 nextPoint += float2(sin(3.14159265358979323846 * r), cos(3.14159265358979323846 * r)) * discTheta;
             }
 

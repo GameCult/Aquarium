@@ -128,7 +128,7 @@ public sealed class ApophysisReferenceParityTests
         Assert.Equal(1.25f, flame.Transforms[0].Variations.JulianDist);
         Assert.Equal(0.02f, flame.Transforms[0].Variations.GaussianBlur);
         Assert.Equal(new Vector4(0.9f, 0.0f, 0.0f, 0.9f), flame.Transforms[0].PostMatrix);
-        Assert.Equal(new Vector4(0.25f, 0.75f, -0.75f, 0.25f), flame.Transforms[1].Matrix);
+        Assert.Equal(new Vector4(0.25f, -0.75f, 0.75f, 0.25f), flame.Transforms[1].Matrix);
         Assert.Equal(0.8f, flame.Transforms[1].Variations.Disc);
         Assert.Contains("variation:normal -> linear", result.Report.Transforms[0].ApproximatedFields);
         Assert.Contains("variation:jwf_gaussian_blur -> stochastic gaussian_blur", result.Report.Transforms[0].ApproximatedFields);
@@ -150,6 +150,30 @@ public sealed class ApophysisReferenceParityTests
         Assert.Equal(5.0f, rows[0].TileAddress.Z);
         Assert.Equal(0.02f, rows[0].TileAddress.W);
         Assert.Equal(0.8f, rows[1].TileAddress.X);
+    }
+
+    [Fact]
+    public void JWildfireDiscVariationUsesReferenceAngleConvention()
+    {
+        var transform = new FractalFlameTransform2D(
+            "disc",
+            new Vector4(1.0f, 0.0f, 0.0f, 1.0f),
+            Vector2.Zero,
+            new Vector4(1.0f, 0.0f, 0.0f, 1.0f),
+            Vector2.Zero,
+            1.0f,
+            0.0f,
+            new FractalFlameVariationWeights(0.0f, 0.0f, 0.0f, Disc: 1.0f));
+        var point = new Vector2(0.25f, -0.75f);
+
+        var actual = transform.Apply(point);
+        var radius = point.Length();
+        var phi = MathF.Atan2(point.X, point.Y);
+        var expected = new Vector2(
+            MathF.Sin(MathF.PI * radius) * phi / MathF.PI,
+            MathF.Cos(MathF.PI * radius) * phi / MathF.PI);
+
+        AssertClose(expected, actual);
     }
 
     [Fact]

@@ -42,7 +42,7 @@ public readonly record struct FractalFlameVariationWeights(
         if (Disc != 0.0f)
         {
             var radius = MathF.Sqrt(radiusSquared);
-            var theta = MathF.Atan2(point.Y, point.X);
+            var theta = MathF.Atan2(point.X, point.Y);
             var scaledTheta = Disc * theta / MathF.PI;
             result += new Vector2(
                 MathF.Sin(MathF.PI * radius) * scaledTheta,

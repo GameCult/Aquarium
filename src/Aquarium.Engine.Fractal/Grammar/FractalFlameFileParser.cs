@@ -57,7 +57,7 @@ public static class FractalFlameFileParser
         }
 
         var matrix = isJWildfireDialect
-            ? new Vector4(coefs[0], coefs[2], coefs[1], coefs[3])
+            ? new Vector4(coefs[0], coefs[1], coefs[2], coefs[3])
             : new Vector4(coefs[0], coefs[1], coefs[3], coefs[4]);
         var translation = isJWildfireDialect
             ? new Vector2(coefs[4], coefs[5])
@@ -66,7 +66,7 @@ public static class FractalFlameFileParser
         var postMatrix = post is null
             ? new Vector4(1.0f, 0.0f, 0.0f, 1.0f)
             : isJWildfireDialect
-                ? new Vector4(post[0], post[2], post[1], post[3])
+                ? new Vector4(post[0], post[1], post[2], post[3])
                 : new Vector4(post[0], post[1], post[3], post[4]);
         var postTranslation = post is null
             ? Vector2.Zero

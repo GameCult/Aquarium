@@ -186,6 +186,21 @@ not "more samples"; it is dialect and camera semantics: FARender flame camera
 mapping, color/density filtering, chaos/xaos and weighting-field behavior, and
 variation exactness.
 
+The first post-oracle correction found two concrete import/math lies:
+
+- JWildfire `coefs` are packed for FARender's affine as `a b d e c f`; Aquarium
+  had transposed the off-diagonal terms as `a d / b e`.
+- FARender's `jwf_disc` source uses `atan2(x, y) / PI`; Aquarium used
+  `atan2(y, x) / PI`.
+
+After fixing both, the same external-density receipt scored `26.87%` at
+`256x256` bounds `-2,-2,2,2`, up from `15.33%`. The remaining visible
+"explosion" is no longer just orbit math. Aquarium is still scoring raw splat
+positions as equal mass, while FARender's image is camera-mapped, filtered,
+gamma/brightness processed, and effectively drops sparse low-density outliers.
+The next oracle step is to compare Aquarium through a matching density image
+resolve, not raw point occupancy.
+
 ## JWildfire Selftest Faceplant
 
 Running JWildfire's bundled `selftest.flame` through Aquarium is the correct
