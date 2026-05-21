@@ -44,6 +44,10 @@ Console.WriteLine($"flame states: {receipt.FlameStateCount:N0}");
 Console.WriteLine($"ifs program transforms: {receipt.ProgramTransformCount:N0}");
 Console.WriteLine($"program mode: {DescribeProgramMode(receipt.ProgramMode)}");
 Console.WriteLine($"priority focus: {receipt.PriorityFocus.X:0.###},{receipt.PriorityFocus.Y:0.###} radius {receipt.PriorityFocus.Z:0.###} strength {receipt.PriorityFocus.W:0.###}");
+if (receipt.AdaptivePriorityFocus is not null)
+{
+    Console.WriteLine($"adaptive priority focus: {receipt.AdaptivePriorityFocus[0]:0.###},{receipt.AdaptivePriorityFocus[1]:0.###} radius {receipt.AdaptivePriorityFocus[2]:0.###} strength {receipt.AdaptivePriorityFocus[3]:0.###}");
+}
 Console.WriteLine($"warmup splat updates/frame: {receipt.WarmupSplatUpdatesPerFrame:N0}");
 Console.WriteLine($"splat updates/frame: {receipt.SplatUpdatesPerFrame:N0}");
 Console.WriteLine($"candidates/pass: {receipt.CandidatesPerPass}");
@@ -262,6 +266,8 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
         var measuredGpuTicks = 0UL;
         var measuredCpuTicks = 0L;
         var measuredFrames = 0;
+        var currentPriorityFocus = options.PriorityFocus;
+        float[]? adaptivePriorityFocus = null;
 
         for (var frame = 0; frame < options.WarmupFrames + options.MeasuredFrames; frame++)
         {
@@ -271,7 +277,7 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
             allocator.Reset();
             commandList.Reset(allocator, splatPipelineState);
             commandList.SetComputeRootSignature(rootSignature);
-            BindConstants(options, frame, resolvedProgramTransforms.Length, resolvedProgramMode, splatDispatchCount);
+            BindConstants(options, frame, resolvedProgramTransforms.Length, resolvedProgramMode, splatDispatchCount, currentPriorityFocus);
             commandList.SetComputeRootUnorderedAccessView(1, splats.GPUVirtualAddress);
             commandList.SetComputeRootUnorderedAccessView(2, sdfReservoirs.GPUVirtualAddress);
             commandList.SetComputeRootUnorderedAccessView(3, pbrReservoirs.GPUVirtualAddress);
@@ -287,7 +293,8 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
             commandList.EndQuery(queryHeap, QueryType.Timestamp, 1);
             commandList.ResolveQueryData(queryHeap, QueryType.Timestamp, 0, 2, queryReadback, 0);
 
-            if (frame == options.WarmupFrames + options.MeasuredFrames - 1 && totalReadbackBytes > 0)
+            var isAdaptiveFocusFrame = options.AdaptiveFocus && frame == options.WarmupFrames - 1 && totalReadbackBytes > 0;
+            if ((isAdaptiveFocusFrame || frame == options.WarmupFrames + options.MeasuredFrames - 1) && totalReadbackBytes > 0)
             {
                 CopyReceiptReadback(splats, sdfReservoirs, pbrReservoirs, radiosityReservoirs, readback, readbackSplatBytes, readbackReservoirBytes);
             }
@@ -308,6 +315,20 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
                     measuredGpuTicks += timestamps[1] - timestamps[0];
                     queryReadback.Unmap(0);
                 }
+            }
+
+            if (isAdaptiveFocusFrame)
+            {
+                var warmupParity = BuildVisualParity(
+                    options,
+                    readback,
+                    readbackSplatBytes,
+                    readbackReservoirBytes,
+                    reservoirStride,
+                    (int)(readbackSplatBytes / (ulong)splatStride))!;
+                var focus = warmupParity.Views[0].SuggestedPriorityFocus;
+                adaptivePriorityFocus = focus;
+                currentPriorityFocus = new Vector4(focus[0], focus[1], focus[2], focus[3]);
             }
         }
 
@@ -352,6 +373,7 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
             reservoirCandidatesPerSecond,
             cpuMsPerFrame,
             checksum,
+            adaptivePriorityFocus,
             visualParity);
 
         void Dispatch(ID3D12PipelineState state, int elementCount)
@@ -452,7 +474,7 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
         return transforms;
     }
 
-    private void BindConstants(ReceiptOptions options, int frame, int programTransformCount, int programMode, int splatDispatchCount)
+    private void BindConstants(ReceiptOptions options, int frame, int programTransformCount, int programMode, int splatDispatchCount, Vector4 priorityFocus)
     {
         commandList.SetComputeRoot32BitConstant(0, (uint)options.SplatCount, 0);
         commandList.SetComputeRoot32BitConstant(0, (uint)frame, 1);
@@ -463,10 +485,10 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
         commandList.SetComputeRoot32BitConstant(0, (uint)programTransformCount, 6);
         commandList.SetComputeRoot32BitConstant(0, (uint)programMode, 7);
         commandList.SetComputeRoot32BitConstant(0, (uint)splatDispatchCount, 8);
-        commandList.SetComputeRoot32BitConstant(0, BitConverter.SingleToUInt32Bits(options.PriorityFocus.X), 9);
-        commandList.SetComputeRoot32BitConstant(0, BitConverter.SingleToUInt32Bits(options.PriorityFocus.Y), 10);
-        commandList.SetComputeRoot32BitConstant(0, BitConverter.SingleToUInt32Bits(options.PriorityFocus.Z), 11);
-        commandList.SetComputeRoot32BitConstant(0, BitConverter.SingleToUInt32Bits(options.PriorityFocus.W), 12);
+        commandList.SetComputeRoot32BitConstant(0, BitConverter.SingleToUInt32Bits(priorityFocus.X), 9);
+        commandList.SetComputeRoot32BitConstant(0, BitConverter.SingleToUInt32Bits(priorityFocus.Y), 10);
+        commandList.SetComputeRoot32BitConstant(0, BitConverter.SingleToUInt32Bits(priorityFocus.Z), 11);
+        commandList.SetComputeRoot32BitConstant(0, BitConverter.SingleToUInt32Bits(priorityFocus.W), 12);
     }
 
     private void CopyReceiptReadback(ID3D12Resource splats, ID3D12Resource sdf, ID3D12Resource pbr, ID3D12Resource radiosity, ID3D12Resource readback, ulong splatBytes, ulong reservoirBytes)
@@ -1002,6 +1024,7 @@ internal sealed record ReceiptOptions(
     int ProgramTransformCount,
     int ProgramMode,
     Vector4 PriorityFocus,
+    bool AdaptiveFocus,
     int ReadbackSplats,
     string ShaderPath,
     string OutputDirectory,
@@ -1035,6 +1058,7 @@ internal sealed record ReceiptOptions(
             0,
             0,
             Vector4.Zero,
+            false,
             64,
             Path.Combine("src", "Aquarium.Engine", "Render", "Shaders", "D3D12FractalReservoirCompute.hlsl"),
             Path.Combine("artifacts", "fractal-splat-receipts"),
@@ -1070,6 +1094,7 @@ internal sealed record ReceiptOptions(
                 "--program-transforms" => options with { ProgramTransformCount = int.Parse(Next()), ProgramMode = 1 },
                 "--program-flame" => options with { ProgramFlamePath = Next(), ProgramMode = 2 },
                 "--priority-focus" => options with { PriorityFocus = ParseBounds(Next(), "Priority focus") },
+                "--adaptive-focus" => options with { AdaptiveFocus = true, VisualParity = true },
                 "--readback-splats" => options with { ReadbackSplats = int.Parse(Next()) },
                 "--shader" => options with { ShaderPath = Next() },
                 "--out" => options with { OutputDirectory = Next() },
@@ -1139,6 +1164,11 @@ internal sealed record ReceiptOptions(
         if (options.VisualParity && options.ProgramFlamePath is null && options.ReferenceDensityPpmPath is null)
         {
             throw new ArgumentException("Visual parity requires --program-flame or --reference-density-ppm.");
+        }
+
+        if (options.AdaptiveFocus && (options.WarmupFrames <= 0 || options.ReadbackSplats <= 0))
+        {
+            throw new ArgumentException("Adaptive focus requires at least one warmup frame and positive readback splats.");
         }
 
         if (options.SplatCount <= 0 || options.WarmupSplatUpdatesPerFrame <= 0 || options.WarmupSplatUpdatesPerFrame > options.SplatCount || options.SplatUpdatesPerFrame <= 0 || options.SplatUpdatesPerFrame > options.SplatCount || options.WarmupFrames < 0 || options.MeasuredFrames <= 0 || options.Depth <= 0 || options.CandidatesPerPass <= 0 || options.ReservoirUpdatesPerPass <= 0 || options.ReservoirUpdatesPerPass > options.SplatCount || options.ProgramTransformCount < 0 || options.ProgramMode < 0 || options.ProgramMode > 2 || options.ReadbackSplats < 0 || options.VisualParityReferenceSamples <= 0)
@@ -1425,4 +1455,5 @@ internal sealed record GpuFractalSplatReceipt(
     double GpuReservoirCandidatesPerSecond,
     double CpuSubmitAndWaitMillisecondsPerFrame,
     ulong ReadbackChecksum,
+    float[]? AdaptivePriorityFocus,
     VisualParityReceipt? VisualParity);
