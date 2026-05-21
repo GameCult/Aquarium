@@ -217,16 +217,19 @@ SceneOut ResolveFractalSplat(FractalSplatVertexOut input, bool renderTransparent
     float opacity = transparentField
         ? saturate(edgeCoverage * edgeCoverage * (0.18 + reservoirConfidence * 0.32))
         : saturate(edgeCoverage * (0.78 + reservoirConfidence * 0.22));
+    float reservoirUpdatedFrame = min(
+        sdfResident ? sdf.validation.y : frameIndex,
+        min(
+            pbrResident ? pbr.validation.y : frameIndex,
+            radiosityResident ? radiosity.validation.y : frameIndex));
+    float reservoirSampleAge = max(frameIndex - reservoirUpdatedFrame, 0.0);
+    float domainValidity = reservoirConfidence > 0.0 ? 1.0 : 0.0;
 
     SceneOut output;
     output.colorTravel = float4(litColor * opacity, min(input.travel - surfaceZ * input.worldRadius, farDistance + 1.0));
     output.metadata = float4(FIELD_ID_FRACTAL_SPLAT_BASE, normal);
     output.control = float4(opacity, reservoirConfidence, transparentField ? splat.materialConfidence.z / 10.0 : saturate((sdfResident ? sdf.centerRadius.w : splat.centerRadius.w) * 40.0), 0.0);
-    output.reservoirGuide = float4(
-        sdfResident ? saturate(sdf.validation.x) : 0.0,
-        pbrResident ? saturate(pbr.validation.x) : 0.0,
-        radiosityResident ? saturate(radiosity.validation.x) : 0.0,
-        reservoirConfidence);
+    output.reservoirGuide = float4(reservoirConfidence, reservoirSampleAge, domainValidity, 0.0);
     output.depth = saturate(input.travel / max(farDistance, 0.0001));
     return output;
 }
