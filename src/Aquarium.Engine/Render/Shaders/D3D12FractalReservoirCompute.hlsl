@@ -304,6 +304,11 @@ float3 FractalPoint(uint index, out float radius)
 
 uint ReservoirIndex(uint updateIndex, uint passKind)
 {
+    if (ReservoirUpdatesPerPass >= SplatCount)
+    {
+        return updateIndex % SplatCount;
+    }
+
     return Hash(updateIndex * 1664525u + FrameIndex * 1013904223u + passKind * 747796405u + Seed) % SplatCount;
 }
 

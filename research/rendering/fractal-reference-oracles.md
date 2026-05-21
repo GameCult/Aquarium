@@ -225,6 +225,14 @@ the same gate to `43.13%` with `68.01%` occupancy overlap; pass
 that path. The contact sheet lives at
 `artifacts/fractal-flame-jwildfire-reference/julian-disc-baby-normal-cut-area-contact.png`.
 
+Full reservoir refreshes must not use the stochastic hash indexer. When
+`ReservoirUpdatesPerPass == SplatCount`, the compute shader now updates row
+`updateIndex` directly for each reservoir layer. That keeps under-budget passes
+stochastic while making full coverage actually full and memory-coherent. The
+same `julian-disc-baby` full-refresh receipt stayed visually equivalent
+(`43.09%`, `67.99%` occupancy overlap) but dropped from roughly `41 ms/frame`
+to `7.508 ms/frame`, or `133.2 FPS` equivalent.
+
 The remaining visible mismatch is now narrower: Aquarium draws the same family
 of form, but its density is still too compact and differently weighted. Fixing
 that belongs in exact JWildfire variation/camera parity, target density
