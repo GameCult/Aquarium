@@ -315,7 +315,11 @@ public readonly record struct AquariumBrushClaim(
     float ShapePower,
     float Amplitude,
     int Seed,
-    string Tags);
+    string Tags,
+    float WaveAmplitude = 0.0f,
+    float WaveFrequency = 0.0f,
+    float WaveSpeed = 0.0f,
+    float WaveSinePower = 0.0f);
 
 public enum AquariumFractalOperation
 {

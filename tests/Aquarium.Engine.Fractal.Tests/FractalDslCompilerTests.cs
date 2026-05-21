@@ -102,6 +102,26 @@ public sealed class FractalDslCompilerTests
     }
 
     [Fact]
+    public void DslRippleClaimCarriesAetheriaStyleWaveEnvelope()
+    {
+        const string source = """
+            tile PositiveZ 0 0 0 fensalir/marsh
+            ripple spine-reflection 0 -1 1.2 4.0 0.1 3.8 0.72 0.012 0.046 20.0 0.22 1.55 17 cyan-ripple
+            """;
+
+        var tree = FractalDslCompiler.Compile(source);
+        var claim = Assert.Single(tree.Claims);
+
+        Assert.Equal(AquariumFractalPayloadKind.Height, claim.PayloadKind);
+        Assert.Equal("cyan-ripple", claim.Tags);
+        Assert.Equal(0.012f, claim.Amplitude);
+        Assert.Equal(0.046f, claim.WaveAmplitude);
+        Assert.Equal(20.0f, claim.WaveFrequency);
+        Assert.Equal(0.22f, claim.WaveSpeed);
+        Assert.Equal(1.55f, claim.WaveSinePower);
+    }
+
+    [Fact]
     public void DslPreservesMultipleTileRoots()
     {
         const string source = """

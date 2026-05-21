@@ -1,0 +1,16 @@
+# Fensalir splash scene patch.
+# The marsh is a 2D surface domain: low height for mirror bed, ripple brushes for
+# water motion, and recursive fine claims for small surface texture.
+domain Surface2D fensalir/splash - -8 8 -4 6 0 0 0 0
+domain Surface2D fensalir/marsh fensalir/splash -8 8 -4 4 0 0 0 0
+domain Object3D fensalir/hall fensalir/marsh 0 0 0 6 0 0 0 0
+domain Object3D fensalir/spine fensalir/hall 0 0 2.6 3.8 0 0 0 0
+tile PositiveZ 0 0 0 fensalir/marsh-plane fensalir/marsh
+height mirror-bed 0 0 8 4.8 0 2.4 1 -0.018 11 water-bed
+ripple spine-reflection 0 -0.85 1.18 4.1 0 3.8 0.72 0.012 0.046 20.0 0.22 1.55 17 cyan-ripple
+ripple magenta-left -2.4 -0.72 0.64 2.6 0.12 4.4 0.9 0.004 0.022 17.0 0.17 1.42 19 magenta-ripple
+ripple magenta-right 2.4 -0.72 0.64 2.6 -0.12 4.4 0.9 0.004 0.022 17.0 0.17 1.42 23 magenta-ripple
+ripple hall-wake 0 1.2 4.8 1.2 0 3.0 1.1 -0.006 0.019 11.0 -0.08 1.25 29 hall-wake
+ifs edge-reeds 3 2 -6.5 -0.8 0.52 1.8 0.48 3.5 0.91 5.0 1.05 0.006 31 reed-shadow
+ifs edge-reeds 3 2 6.5 -0.7 0.52 1.8 0.48 3.5 -0.91 5.0 1.05 0.006 37 reed-shadow
+ifs micro-ripples 4 3 0 -1.6 2.8 1.2 0.42 2.6 0.37 6.2 0.8 0.003 41 micro-ripple

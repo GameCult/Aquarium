@@ -89,6 +89,14 @@ public static class FractalDslCompiler
                     claims.Add(ParseFieldClaim(tokens, fieldDomain.Key, currentNode!.Key, lineIndex, claims.Count - currentNode.FirstClaimIndex));
                     currentNode.ClaimCount++;
                     break;
+                case "ripple":
+                    EnsureDomain(domain, lineIndex);
+                    EnsureNode(currentNode, lineIndex);
+                    EnsureTokenCount(tokens, 16, lineIndex);
+                    var rippleDomain = domain!.Value;
+                    claims.Add(ParseRippleClaim(tokens, rippleDomain.Key, currentNode!.Key, lineIndex, claims.Count - currentNode.FirstClaimIndex));
+                    currentNode.ClaimCount++;
+                    break;
                 case "ifs":
                     EnsureDomain(domain, lineIndex);
                     EnsureNode(currentNode, lineIndex);
@@ -159,6 +167,29 @@ public static class FractalDslCompiler
             ParseFloat(tokens[9], lineIndex),
             ParseInt(tokens[10], lineIndex),
             tokens[11]);
+    }
+
+    private static AquariumBrushClaim ParseRippleClaim(string[] tokens, AquariumFractalKey domainKey, AquariumFractalKey nodeKey, int lineIndex, int claimIndex)
+    {
+        var name = tokens[1];
+        return FieldClaim(
+            AquariumFractalPayloadKind.Height,
+            domainKey,
+            nodeKey,
+            name,
+            claimIndex,
+            new Vector2(ParseFloat(tokens[2], lineIndex), ParseFloat(tokens[3], lineIndex)),
+            new Vector2(ParsePositiveFloat(tokens[4], lineIndex), ParsePositiveFloat(tokens[5], lineIndex)),
+            ParseFloat(tokens[6], lineIndex),
+            ParsePositiveFloat(tokens[7], lineIndex),
+            ParsePositiveFloat(tokens[8], lineIndex),
+            ParseFloat(tokens[9], lineIndex),
+            ParseInt(tokens[14], lineIndex),
+            tokens[15],
+            ParseFloat(tokens[10], lineIndex),
+            ParsePositiveFloat(tokens[11], lineIndex),
+            ParseFloat(tokens[12], lineIndex),
+            ParsePositiveFloat(tokens[13], lineIndex));
     }
 
     private static AquariumFractalPayloadKind ParsePayloadKind(string token, int lineIndex)
@@ -340,7 +371,11 @@ public static class FractalDslCompiler
         float shapePower,
         float amplitude,
         int seed,
-        string tags)
+        string tags,
+        float waveAmplitude = 0.0f,
+        float waveFrequency = 0.0f,
+        float waveSpeed = 0.0f,
+        float waveSinePower = 0.0f)
     {
         return new AquariumBrushClaim(
             FractalStableKeyBuilder.Child(nodeKey, $"claim/{claimIndex:0000}/{name}"),
@@ -354,7 +389,11 @@ public static class FractalDslCompiler
             shapePower,
             amplitude,
             seed,
-            tags);
+            tags,
+            waveAmplitude,
+            waveFrequency,
+            waveSpeed,
+            waveSinePower);
     }
 
     private static string StripComment(string line)

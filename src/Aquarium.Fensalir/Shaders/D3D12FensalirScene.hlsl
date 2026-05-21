@@ -1,0 +1,273 @@
+cbuffer AquariumFrame : register(b0)
+{
+    float2 resolution;
+    float timeSeconds;
+    float viewRadius;
+    float3 cameraPosition;
+    float farDistance;
+    float3 cameraTarget;
+    float sceneFlags;
+    float2 viewCenter;
+    float frameIndex;
+    float previousTimeSeconds;
+    float3 previousCameraPosition;
+    float previousViewRadius;
+    float3 previousCameraTarget;
+    float previousSceneFlags;
+    float2 previousViewCenter;
+    float2 jitterPixels;
+    float2 previousJitterPixels;
+    float renderDebugMode;
+    float exposure;
+    float bloomIntensity;
+    float bloomVeilIntensity;
+    float4 cursorWorlds;
+    float4 temporalGaussianInfo;
+};
+
+Texture2D<float4> heightFieldTexture : register(t0);
+SamplerState linearSampler : register(s0);
+
+static const float FIELD_ID_HEIGHT_FIELD = 4.0;
+static const float HEIGHT_FIELD_TEXEL_COUNT = 128.0;
+
+struct VertexOut
+{
+    float4 position : SV_Position;
+    float2 uv : TEXCOORD0;
+};
+
+struct SceneOut
+{
+    float4 colorTravel : SV_Target0;
+    float4 metadata : SV_Target1;
+    float4 control : SV_Target2;
+    float4 reservoirGuide : SV_Target3;
+    float depth : SV_Depth;
+};
+
+struct RayMarchResult
+{
+    float3 color;
+    float travel;
+    float fieldId;
+    float3 normal;
+    float coverage;
+    float stepCount;
+};
+
+VertexOut FullscreenTriangleVS(uint vertexId : SV_VertexID)
+{
+    float2 uv = float2((vertexId << 1) & 2, vertexId & 2);
+    VertexOut output;
+    output.position = float4(uv * float2(2.0, -2.0) + float2(-1.0, 1.0), 0.0, 1.0);
+    output.uv = uv;
+    return output;
+}
+
+void cameraBasis(float3 camera, float3 target, out float3 forward, out float3 right, out float3 up)
+{
+    forward = normalize(target - camera);
+    right = normalize(cross(forward, float3(0.0, 0.0, 1.0)));
+    up = cross(right, forward);
+}
+
+float3 rayDirectionForPixel(float2 pixel, float2 jitter, float3 camera, float3 target)
+{
+    float2 ndc = ((pixel + jitter) * 2.0 - resolution) / resolution.y;
+    float3 forward;
+    float3 right;
+    float3 up;
+    cameraBasis(camera, target, forward, right, up);
+    return normalize(forward * 1.6 + right * ndc.x + up * ndc.y);
+}
+
+float2 viewLocal(float2 p)
+{
+    return (p - viewCenter) / max(viewRadius, 0.001);
+}
+
+float2 viewUv(float2 p)
+{
+    return viewLocal(p) * 0.5 + 0.5;
+}
+
+float terrainHeight(float2 p)
+{
+    return heightFieldTexture.SampleLevel(linearSampler, saturate(viewUv(p)), 0.0).r;
+}
+
+float2 terrainGradient(float2 p)
+{
+    float2 uv = saturate(viewUv(p));
+    float2 texel = 1.0 / HEIGHT_FIELD_TEXEL_COUNT;
+    float texelWorld = max((viewRadius * 2.0) / HEIGHT_FIELD_TEXEL_COUNT, 0.001);
+
+    float hLeft = heightFieldTexture.SampleLevel(linearSampler, uv - float2(texel.x, 0.0), 0.0).r;
+    float hRight = heightFieldTexture.SampleLevel(linearSampler, uv + float2(texel.x, 0.0), 0.0).r;
+    float hDown = heightFieldTexture.SampleLevel(linearSampler, uv - float2(0.0, texel.y), 0.0).r;
+    float hUp = heightFieldTexture.SampleLevel(linearSampler, uv + float2(0.0, texel.y), 0.0).r;
+    return float2(hRight - hLeft, hUp - hDown) / (texelWorld * 2.0);
+}
+
+bool traceHeightFieldSurfaceDirect(float3 origin, float3 direction, float intervalStart, float intervalEnd, out float3 hitPosition, out float travel)
+{
+    travel = max(intervalStart, 0.0);
+    float previousTravel = travel;
+    hitPosition = origin + direction * travel;
+    float previousGap = hitPosition.z - terrainHeight(hitPosition.xy);
+
+    [loop]
+    for (int stepIndex = 0; stepIndex < 96; stepIndex++)
+    {
+        hitPosition = origin + direction * travel;
+        float2 local = viewLocal(hitPosition.xy);
+        if (length(local) > 1.08 && hitPosition.z < 4.0)
+        {
+            return false;
+        }
+
+        float gap = hitPosition.z - terrainHeight(hitPosition.xy);
+        float hitEpsilon = max(0.002, travel * 0.00035);
+        if (length(local) <= 1.0 && (abs(gap) <= hitEpsilon || (previousGap > 0.0 && gap <= 0.0)))
+        {
+            float alpha = previousGap / max(previousGap - gap, 0.0001);
+            travel = lerp(previousTravel, travel, saturate(alpha));
+            hitPosition = origin + direction * travel;
+            return travel > intervalStart && travel < intervalEnd && travel < farDistance;
+        }
+
+        float2 slope = terrainGradient(hitPosition.xy);
+        float terrainRate = abs(direction.z - dot(slope, direction.xy));
+        float terrainStep = gap > 0.0 ? gap / max(terrainRate, 0.22) : 0.026;
+        terrainStep = min(terrainStep * 0.62, max(viewRadius * 0.08, 0.026));
+        previousTravel = travel;
+        previousGap = gap;
+        travel += max(terrainStep, 0.026);
+        if (travel > intervalEnd || travel > farDistance)
+        {
+            return false;
+        }
+    }
+
+    return false;
+}
+
+float hash31(float3 p)
+{
+    return frac(sin(dot(p, float3(12.9898, 78.233, 37.719))) * 43758.5453);
+}
+
+float valueNoise3(float3 p)
+{
+    float3 cell = floor(p);
+    float3 local = frac(p);
+    local = local * local * (3.0 - 2.0 * local);
+
+    float c000 = hash31(cell);
+    float c100 = hash31(cell + float3(1.0, 0.0, 0.0));
+    float c010 = hash31(cell + float3(0.0, 1.0, 0.0));
+    float c110 = hash31(cell + float3(1.0, 1.0, 0.0));
+    float c001 = hash31(cell + float3(0.0, 0.0, 1.0));
+    float c101 = hash31(cell + float3(1.0, 0.0, 1.0));
+    float c011 = hash31(cell + float3(0.0, 1.0, 1.0));
+    float c111 = hash31(cell + float3(1.0, 1.0, 1.0));
+
+    float x00 = lerp(c000, c100, local.x);
+    float x10 = lerp(c010, c110, local.x);
+    float x01 = lerp(c001, c101, local.x);
+    float x11 = lerp(c011, c111, local.x);
+    return lerp(lerp(x00, x10, local.y), lerp(x01, x11, local.y), local.z);
+}
+
+float fractalNoise3(float3 p)
+{
+    float sum = 0.0;
+    float amplitude = 0.5;
+    [unroll]
+    for (int octave = 0; octave < 4; octave++)
+    {
+        sum += valueNoise3(p) * amplitude;
+        p = p * 2.03 + float3(5.7, 2.1, 9.3);
+        amplitude *= 0.52;
+    }
+
+    return sum;
+}
+
+float3 backgroundRadiance(float3 direction)
+{
+    float horizon = smoothstep(-0.24, 0.42, direction.z);
+    float verticalAxis = pow(saturate(1.0 - abs(direction.x) * 6.4), 3.0) * smoothstep(-0.18, 0.72, direction.z);
+    float hall = pow(saturate(1.0 - abs(abs(direction.x) - 0.22) * 12.0), 2.0) * smoothstep(-0.08, 0.58, direction.z);
+    float fog = pow(saturate(fractalNoise3(direction * 4.1 + float3(0.0, timeSeconds * 0.015, 0.0)) - 0.18), 2.2);
+
+    float3 voidColor = lerp(float3(0.001, 0.006, 0.009), float3(0.018, 0.055, 0.062), horizon);
+    float3 cyan = float3(0.50, 1.55, 2.25) * verticalAxis * 0.62;
+    float3 magenta = float3(1.25, 0.12, 0.82) * hall * 0.18;
+    float3 mist = float3(0.12, 0.36, 0.38) * fog * (0.18 + horizon * 0.24);
+    return voidColor + cyan + magenta + mist;
+}
+
+float3 surfaceMirrorRadiance(float3 p, float3 direction, out float3 normal)
+{
+    float2 gradient = terrainGradient(p.xy);
+    normal = normalize(float3(-gradient.x, -gradient.y, 1.0));
+    float3 reflectionDirection = reflect(direction, normal);
+    float3 reflected = backgroundRadiance(reflectionDirection);
+
+    float spineReflection = exp(-abs(p.x) * 2.7) * smoothstep(3.4, -2.6, p.y);
+    float magentaLeft = exp(-abs(p.x + 2.35) * 3.2) * smoothstep(2.4, -2.2, p.y);
+    float magentaRight = exp(-abs(p.x - 2.35) * 3.2) * smoothstep(2.4, -2.2, p.y);
+    float rippleSparkle = pow(saturate(fractalNoise3(float3(p.xy * 5.2, timeSeconds * 0.22)) - 0.47), 5.0);
+    float fresnel = pow(1.0 - saturate(dot(normal, -direction)), 3.0);
+
+    float3 baseWater = float3(0.002, 0.014, 0.017);
+    float3 cyan = float3(0.35, 1.40, 2.35) * spineReflection * (0.38 + rippleSparkle * 0.55);
+    float3 magenta = float3(1.10, 0.08, 0.74) * (magentaLeft + magentaRight) * 0.12;
+    float3 gold = float3(1.0, 0.72, 0.26) * rippleSparkle * 0.032;
+    return baseWater + reflected * (0.16 + fresnel * 0.28) + cyan + magenta + gold;
+}
+
+RayMarchResult traverseRay(float3 origin, float3 direction)
+{
+    RayMarchResult result;
+    result.color = backgroundRadiance(direction);
+    result.travel = farDistance + 1.0;
+    result.fieldId = 0.0;
+    result.normal = 0.0;
+    result.coverage = 0.0;
+    result.stepCount = 0.0;
+
+    float3 surfacePosition;
+    float surfaceTravel;
+    bool surfaceHit = traceHeightFieldSurfaceDirect(origin, direction, 0.0, farDistance, surfacePosition, surfaceTravel);
+    if (surfaceHit)
+    {
+        float3 surfaceNormal;
+        result.color = surfaceMirrorRadiance(surfacePosition, direction, surfaceNormal);
+        result.travel = surfaceTravel;
+        result.fieldId = FIELD_ID_HEIGHT_FIELD;
+        result.normal = surfaceNormal;
+        result.coverage = 1.0;
+    }
+
+    return result;
+}
+
+SceneOut D3D12ScenePS(VertexOut input)
+{
+    float2 screenUv = float2(input.uv.x, 1.0 - input.uv.y);
+    float2 pixel = screenUv * resolution;
+    float3 rayDirection = rayDirectionForPixel(pixel, jitterPixels, cameraPosition, cameraTarget);
+
+    RayMarchResult result = traverseRay(cameraPosition, rayDirection);
+
+    SceneOut output;
+    output.colorTravel = float4(result.color, min(result.travel, farDistance + 1.0));
+    output.metadata = float4(result.fieldId, result.normal);
+    output.control = float4(result.coverage, result.stepCount / 96.0, 0.0, 0.0);
+    output.reservoirGuide = float4(1.0, 0.0, 1.0, 0.0);
+    output.depth = saturate(result.travel / max(farDistance, 0.001));
+    return output;
+}

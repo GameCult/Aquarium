@@ -51,6 +51,18 @@ current_model:
     purpose: >
       Non-Epiphany planetary-scale rendering demo using the shared Aquarium host,
       D3D12 renderer, reload transport, UI contracts, bloom, and SDF proxy path.
+  fensalir_client:
+    implementation: src/Aquarium.Fensalir
+    render_plan: src/Aquarium.Fensalir/FensalirRenderPlan.cs
+    scene_builder: src/Aquarium.Fensalir/FensalirSceneBuilder.cs
+    shaders: src/Aquarium.Fensalir/Shaders
+    world_patch: src/Aquarium.Fensalir/Worlds/fensalir-spine-emblem.aquageo
+    splash_prompt: research/rendering/fensalir-spine-emblem-ifs-demo.md
+    ground_truth_image: src/Aquarium.Engine/Assets/Fensalir-Splash.png
+    purpose: >
+      First artistic Fensalir reconstruction client: loads a .aquageo scene
+      patch, lowers marsh/water surface claims into shaped 2D ripple brushes,
+      and renders the central luminous spine through the normal SDF proxy path.
   samples:
     minimal_client: src/Aquarium.Sample.Minimal
   dependencies:
@@ -138,6 +150,7 @@ renderer_state:
     - Fractal residency uses score-per-cost retention under RAM pressure and emits evicted node keys as planner output; real storage mutation waits for a page/payload store boundary.
     - Compact 3D form splats now have explicit opaque and transparent CPU contracts: structural FractalProbeSample evidence carries layer/encoding metadata, Form/SignedDistance lowers through AquariumFractalSdfSplat3D and FractalSdfSplat3DCompiler, and Form/Density or Form/Extinction lowers through AquariumFractalDensitySplat3D and FractalDensitySplat3DCompiler. The same ResampledImportanceReservoir<FractalProbeSample> handles both; lowering rejects wrong encodings instead of silently forcing density through SDF semantics.
     - The `.aquageo` DSL now accepts `density` and `extinction` field claims using the same compact brush syntax as `height`, and the recursive `flame` primitive emits Density payloads. FractalSummaryBuilder treats Height, SignedDistance, Density, and Extinction as Form contribution. FractalHeightBrushCompiler filters mixed trees to Height payloads for height-field lowering instead of forcing transparent fields into terrain brushes.
+    - The `.aquageo` DSL also accepts `ripple` claims for 2D surface domains. A ripple is a Height claim with the same compact shaped envelope plus explicit wave amplitude, radial frequency, speed, and sine-power, lowered into the existing AquariumHeightFieldBrush wave lane. This is the Aetheria-style cheap water primitive Fensalir uses for the marsh mirror plane.
     - Hot fractal splats and their temporal cache layers must be GPU-resident packed buffers. AquariumPackedFractalSdfSplat3D is the first opaque 80-byte numeric Form packet; AquariumPackedFractalDensitySplat3D is the matching 80-byte transparent Form packet for density/extinction. The current SDF envelope, PBR material, and radiosity reservoir packets are distinct 64-byte UAV rows sampled in independent compute passes for Form, Appearance, and Transport, and FractalGpuReservoirBudgetPlanner now reports both backend pass kind and conceptual layer/encoding. SDF/PBR/radiosity are backend packet names, not the conceptual architecture. tools/Aquarium.Fractal.Receipt proves a D3D12 compute path can keep 2,000,000 splats and 2,000,000 reservoirs per layer resident on the GTX 1070. The fallback hash-fractal receipt updates 50,000 entries per reservoir layer per frame with 2 candidates/update and runs at 4.471 ms/frame, 223.7 FPS equivalent. The authored IFS-program path now uses precomposed selected-cut rows instead of replaying ancestry per splat; a depth-48 authored receipt with 4 compact transforms and 15,000 updates per reservoir layer runs at 4.908 ms/frame, 203.7 FPS equivalent, with full reservoir coverage in 133.3 frames. Receipts use only tiny checksum readback and compile the shared engine shader asset src/Aquarium.Engine/Render/Shaders/D3D12FractalReservoirCompute.hlsl.
     - 2D-projected-to-3D splats have a pure compiler seam: FractalProjectedSdfSplatCompiler maps resident SignedDistance2D page payload samples through an explicit page-to-world function and normal into bounded AquariumFractalSdfSplat3D packets.
     - AquariumSceneState now carries AquariumFractalReservoirField as the narrow client-to-renderer request for GPU-resident fractal reservoirs: resident splat count, stochastic splat updates per frame, IFS depth/seed, candidates per reservoir update, stochastic updates per pass, authored program transforms, and an explicit world center/radius. This is a budgeted GPU field request, not a CPU splat list.
