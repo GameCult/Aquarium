@@ -25,6 +25,7 @@ public sealed class FractalSummaryBuilderTests
         Assert.Equal(rootKey, summaries[0].NodeKey);
         Assert.Equal(new Vector4(-1.0f, -2.0f, 5.0f, 2.0f), summaries[0].BoundsMinMax);
         Assert.Equal(1.75f, summaries[0].MaxHeightError);
+        Assert.Equal(AquariumFieldEncodingFlags.Height, summaries[0].FormEncodingMask);
         Assert.Equal(2.0f, summaries[0].EstimatedCost);
         Assert.Equal(2, summaries[0].DescendantCount);
     }
@@ -45,6 +46,7 @@ public sealed class FractalSummaryBuilderTests
         var summary = Assert.Single(FractalSummaryBuilder.Build(tree));
 
         Assert.Equal(1.75f, summary.MaxHeightError);
+        Assert.Equal(AquariumFieldEncodingFlags.Density | AquariumFieldEncodingFlags.Extinction, summary.FormEncodingMask);
     }
 
     private static AquariumBrushClaim Claim(

@@ -41,7 +41,7 @@ public sealed class FractalStructuralProbeReservoirTests
         var rootKey = new AquariumFractalKey("domain/flame/root");
         var domain = new AquariumFractalDomain(domainKey, AquariumFractalDomainKind.Object3D, default, Vector4.Zero, Vector4.Zero);
         var tree = FractalOwnershipTreeBuilder.BuildFlatUnion(domain, rootKey, [
-            Claim("claim/density", domainKey, rootKey, Vector2.Zero, Vector2.One),
+            Claim("claim/density", domainKey, rootKey, Vector2.Zero, Vector2.One, AquariumFractalPayloadKind.Density),
         ]);
         var summaries = FractalSummaryBuilder.Build(tree);
         var cut = FractalSelectedCutBuilder.Build(summaries, _ => 8.0f, maxEstimatedCost: 8.0f);
@@ -51,9 +51,7 @@ public sealed class FractalStructuralProbeReservoirTests
             summaries,
             cut,
             8.0f,
-            new TestFractalRandom(0.0),
-            AquariumFieldLayer.Form,
-            AquariumFieldEncoding.Density);
+            new TestFractalRandom(0.0));
         var sample = snapshot.ToProbeSample();
 
         Assert.True(snapshot.HasSample);
@@ -80,13 +78,14 @@ public sealed class FractalStructuralProbeReservoirTests
         AquariumFractalKey domainKey,
         AquariumFractalKey nodeKey,
         Vector2 center,
-        Vector2 radii)
+        Vector2 radii,
+        AquariumFractalPayloadKind payloadKind = AquariumFractalPayloadKind.Height)
     {
         return new AquariumBrushClaim(
             new AquariumFractalKey(key),
             domainKey,
             nodeKey,
-            AquariumFractalPayloadKind.Height,
+            payloadKind,
             center,
             radii,
             RotationRadians: 0.0f,

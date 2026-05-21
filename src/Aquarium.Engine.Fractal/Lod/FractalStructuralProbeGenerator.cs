@@ -15,7 +15,7 @@ public static class FractalStructuralProbeGenerator
         float sourcePdf,
         int payloadHandle = 0,
         AquariumFieldLayer layer = AquariumFieldLayer.Form,
-        AquariumFieldEncoding encoding = AquariumFieldEncoding.SignedDistance)
+        AquariumFieldEncoding? encoding = null)
     {
         var min = new Vector2(summary.BoundsMinMax.X, summary.BoundsMinMax.Y);
         var max = new Vector2(summary.BoundsMinMax.Z, summary.BoundsMinMax.W);
@@ -36,7 +36,7 @@ public static class FractalStructuralProbeGenerator
             MathF.Max(summary.MaxMaterialDelta, 0.0f),
             payloadHandle,
             layer,
-            encoding);
+            encoding ?? PreferredFormEncoding(summary));
     }
 
     public static ResampledImportanceCandidate<FractalProbeSample> BuildCandidate(
@@ -46,7 +46,7 @@ public static class FractalStructuralProbeGenerator
         double sourceProbability,
         int payloadHandle = 0,
         AquariumFieldLayer layer = AquariumFieldLayer.Form,
-        AquariumFieldEncoding encoding = AquariumFieldEncoding.SignedDistance)
+        AquariumFieldEncoding? encoding = null)
     {
         return FromSummary(
             summary,
@@ -56,5 +56,23 @@ public static class FractalStructuralProbeGenerator
             payloadHandle,
             layer,
             encoding).ToReservoirCandidate();
+    }
+
+    private static AquariumFieldEncoding PreferredFormEncoding(AquariumFractalSummary summary)
+    {
+        var mask = summary.FormEncodingMask;
+        if ((mask & AquariumFieldEncodingFlags.Density) != 0 &&
+            (mask & (AquariumFieldEncodingFlags.Height | AquariumFieldEncodingFlags.SignedDistance)) == 0)
+        {
+            return AquariumFieldEncoding.Density;
+        }
+
+        if ((mask & AquariumFieldEncodingFlags.Extinction) != 0 &&
+            (mask & (AquariumFieldEncodingFlags.Height | AquariumFieldEncodingFlags.SignedDistance | AquariumFieldEncodingFlags.Density)) == 0)
+        {
+            return AquariumFieldEncoding.Extinction;
+        }
+
+        return AquariumFieldEncoding.SignedDistance;
     }
 }

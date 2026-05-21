@@ -71,6 +71,22 @@ public enum AquariumFieldEncoding
     Confidence,
 }
 
+[Flags]
+public enum AquariumFieldEncodingFlags
+{
+    None = 0,
+    SignedDistance = 1 << 0,
+    Height = 1 << 1,
+    Density = 1 << 2,
+    Extinction = 1 << 3,
+    Material = 1 << 4,
+    Phase = 1 << 5,
+    Emission = 1 << 6,
+    Radiance = 1 << 7,
+    Feature = 1 << 8,
+    Confidence = 1 << 9,
+}
+
 public enum AquariumFractalSurfacePageKind
 {
     Height,
@@ -330,7 +346,8 @@ public readonly record struct AquariumFractalSummary(
     float MaxHeightError,
     float MaxMaterialDelta,
     float EstimatedCost,
-    int DescendantCount);
+    int DescendantCount,
+    AquariumFieldEncodingFlags FormEncodingMask = AquariumFieldEncodingFlags.None);
 
 public readonly record struct AquariumContributionState(
     AquariumFractalKey NodeKey,

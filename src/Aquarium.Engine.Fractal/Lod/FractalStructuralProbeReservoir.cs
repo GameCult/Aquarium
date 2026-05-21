@@ -50,7 +50,7 @@ public static class FractalStructuralProbeReservoir
         float projectedPixelsPerWorldUnit,
         IFractalRandom random,
         AquariumFieldLayer layer = AquariumFieldLayer.Form,
-        AquariumFieldEncoding encoding = AquariumFieldEncoding.SignedDistance)
+        AquariumFieldEncoding? encoding = null)
     {
         ArgumentNullException.ThrowIfNull(tree);
         ArgumentNullException.ThrowIfNull(summaries);

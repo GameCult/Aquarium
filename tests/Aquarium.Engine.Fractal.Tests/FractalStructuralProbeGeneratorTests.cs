@@ -45,12 +45,28 @@ public sealed class FractalStructuralProbeGeneratorTests
         Assert.True(candidate.ImportanceWeight > candidate.Target);
     }
 
+    [Fact]
+    public void StructuralProbeDerivesDensityEncodingFromSummaryMask()
+    {
+        var summary = Summary(
+            "node/density",
+            new Vector4(0.0f, 0.0f, 1.0f, 1.0f),
+            maxHeightError: 1.0f,
+            formEncodingMask: AquariumFieldEncodingFlags.Density);
+
+        var probe = FractalStructuralProbeGenerator.FromSummary(summary, new AquariumFractalKey("domain/volume"), 4.0f, sourcePdf: 1.0f);
+
+        Assert.Equal(AquariumFieldLayer.Form, probe.Layer);
+        Assert.Equal(AquariumFieldEncoding.Density, probe.Encoding);
+    }
+
     private static AquariumFractalSummary Summary(
         string key,
         Vector4 bounds,
         float maxHeightError,
         float estimatedCost = 1.0f,
-        float maxMaterialDelta = 0.0f)
+        float maxMaterialDelta = 0.0f,
+        AquariumFieldEncodingFlags formEncodingMask = AquariumFieldEncodingFlags.Height)
     {
         return new AquariumFractalSummary(
             new AquariumFractalKey(key),
@@ -58,6 +74,7 @@ public sealed class FractalStructuralProbeGeneratorTests
             maxHeightError,
             maxMaterialDelta,
             estimatedCost,
-            DescendantCount: 1);
+            DescendantCount: 1,
+            formEncodingMask);
     }
 }

@@ -14,12 +14,14 @@ public static class FractalSummaryBuilder
             var node = tree.Nodes[nodeIndex];
             var maxHeightError = 0.0f;
             var estimatedCost = 0.0f;
+            var formEncodingMask = AquariumFieldEncodingFlags.None;
             for (var claimIndex = node.FirstClaimIndex; claimIndex < node.FirstClaimIndex + node.ClaimCount; claimIndex++)
             {
                 var claim = tree.Claims[claimIndex];
                 if (IsFormPayload(claim.PayloadKind))
                 {
                     maxHeightError += MathF.Abs(claim.Amplitude);
+                    formEncodingMask |= EncodingFlagFor(claim.PayloadKind);
                 }
 
                 estimatedCost += 1.0f;
@@ -31,7 +33,8 @@ public static class FractalSummaryBuilder
                 maxHeightError,
                 MaxMaterialDelta: 0.0f,
                 estimatedCost,
-                DescendantCount: node.ChildCount + node.ClaimCount);
+                DescendantCount: node.ChildCount + node.ClaimCount,
+                formEncodingMask);
         }
 
         return summaries;
@@ -43,5 +46,17 @@ public static class FractalSummaryBuilder
             or AquariumFractalPayloadKind.SignedDistance
             or AquariumFractalPayloadKind.Density
             or AquariumFractalPayloadKind.Extinction;
+    }
+
+    private static AquariumFieldEncodingFlags EncodingFlagFor(AquariumFractalPayloadKind kind)
+    {
+        return kind switch
+        {
+            AquariumFractalPayloadKind.Height => AquariumFieldEncodingFlags.Height,
+            AquariumFractalPayloadKind.SignedDistance => AquariumFieldEncodingFlags.SignedDistance,
+            AquariumFractalPayloadKind.Density => AquariumFieldEncodingFlags.Density,
+            AquariumFractalPayloadKind.Extinction => AquariumFieldEncodingFlags.Extinction,
+            _ => AquariumFieldEncodingFlags.None,
+        };
     }
 }
