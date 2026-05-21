@@ -89,6 +89,7 @@ struct SceneOut
 };
 
 static const float FIELD_ID_FRACTAL_SPLAT_BASE = 4000.0;
+static const float FIELD_ENCODING_DENSITY = 2.0;
 
 void cameraBasis(float3 camera, float3 target, out float3 forward, out float3 right, out float3 up)
 {
@@ -175,6 +176,7 @@ SceneOut D3D12FractalSplatPS(FractalSplatVertexOut input)
     bool sdfResident = sdf.weightTargetCount.z > 0.5;
     bool pbrResident = pbr.weightTargetCount.z > 0.5;
     bool radiosityResident = radiosity.weightTargetCount.z > 0.5;
+    bool densityField = abs(splat.materialConfidence.z - FIELD_ENCODING_DENSITY) < 0.5;
     float surfaceZ = sqrt(saturate(1.0 - r2));
     float3 tangentOffset = (input.basisRight * input.quad.x) + (input.basisUp * input.quad.y);
     float3 normal = normalize(input.basisForward * (0.92 + surfaceZ * 0.08) + tangentOffset * 0.16);
@@ -183,7 +185,9 @@ SceneOut D3D12FractalSplatPS(FractalSplatVertexOut input)
     float viewFacing = saturate(dot(normalize(cameraPosition - surfaceWorld), normal));
     float starFacing = saturate(dot(normal, normalize(float3(0.25, 0.006, 0.077) - surfaceWorld)));
     float material = saturate(splat.materialConfidence.x);
-    float3 fallbackColor = lerp(float3(0.08, 0.38, 0.18), float3(0.78, 0.61, 0.32), material);
+    float3 fallbackColor = densityField
+        ? lerp(float3(0.18, 0.08, 0.32), float3(1.0, 0.44, 0.12), material)
+        : lerp(float3(0.08, 0.38, 0.18), float3(0.78, 0.61, 0.32), material);
     float3 pbrColor = lerp(float3(0.06, 0.30, 0.14), saturate(pbr.baseColorRoughMetal.rgb), 0.72);
     float3 radiosityColor = saturate(radiosity.radianceDistance.rgb);
     float reservoirConfidence = min(
@@ -193,17 +197,19 @@ SceneOut D3D12FractalSplatPS(FractalSplatVertexOut input)
             radiosityResident ? saturate(radiosity.validation.x) : 0.0));
     float3 color = pbrResident ? pbrColor : fallbackColor;
     float roughness = pbrResident ? saturate(pbr.baseColorRoughMetal.w) : 0.6;
-    float diffuse = 0.32 + 0.50 * starFacing + 0.18 * viewFacing;
+    float diffuse = densityField ? 0.52 + 0.36 * viewFacing : 0.32 + 0.50 * starFacing + 0.18 * viewFacing;
     float fresnel = pow(saturate(1.0 - viewFacing), 2.2);
     float3 litColor = color * diffuse + color * 0.18;
     litColor += radiosityResident ? radiosityColor * (0.24 + reservoirConfidence * 0.48) : 0.0;
-    litColor += lerp(float3(0.015, 0.06, 0.05), float3(0.24, 0.30, 0.20), 1.0 - roughness) * fresnel * 0.48;
-    float opacity = saturate(edgeCoverage * (0.78 + reservoirConfidence * 0.22));
+    litColor += lerp(float3(0.015, 0.06, 0.05), densityField ? float3(0.95, 0.28, 0.08) : float3(0.24, 0.30, 0.20), 1.0 - roughness) * fresnel * (densityField ? 0.72 : 0.48);
+    float opacity = densityField
+        ? saturate(edgeCoverage * edgeCoverage * (0.18 + reservoirConfidence * 0.32))
+        : saturate(edgeCoverage * (0.78 + reservoirConfidence * 0.22));
 
     SceneOut output;
     output.colorTravel = float4(litColor * opacity, min(input.travel - surfaceZ * input.worldRadius, farDistance + 1.0));
     output.metadata = float4(FIELD_ID_FRACTAL_SPLAT_BASE, normal);
-    output.control = float4(opacity, reservoirConfidence, saturate((sdfResident ? sdf.centerRadius.w : splat.centerRadius.w) * 40.0), 0.0);
+    output.control = float4(opacity, reservoirConfidence, densityField ? FIELD_ENCODING_DENSITY / 10.0 : saturate((sdfResident ? sdf.centerRadius.w : splat.centerRadius.w) * 40.0), 0.0);
     output.reservoirGuide = float4(
         sdfResident ? saturate(sdf.validation.x) : 0.0,
         pbrResident ? saturate(pbr.validation.x) : 0.0,

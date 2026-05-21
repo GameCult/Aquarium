@@ -67,6 +67,9 @@ RWStructuredBuffer<RadiosityReservoir> RadiosityReservoirs : register(u3);
 RWStructuredBuffer<FlameIterationState> FlameStates : register(u4);
 StructuredBuffer<FractalIfsTransform> ProgramTransforms : register(t0);
 
+static const float FIELD_ENCODING_SIGNED_DISTANCE = 0.0;
+static const float FIELD_ENCODING_DENSITY = 2.0;
+
 uint Hash(uint x)
 {
     x ^= x >> 16;
@@ -355,11 +358,12 @@ void D3D12FractalSplatReceiptCS(uint3 id : SV_DispatchThreadID)
     float radius;
     float3 p = FractalPoint(index, radius);
     uint h = Hash(index + FrameIndex * 1664525u + Seed);
+    float fieldEncoding = ProgramMode == 2u ? FIELD_ENCODING_DENSITY : FIELD_ENCODING_SIGNED_DISTANCE;
     FractalSdfSplat splat;
     splat.centerRadius = float4(p, radius);
     splat.orientation = float4(0.0, 0.0, 0.0, 1.0);
     splat.radiiFalloff = float4(radius, radius * 0.72, radius * 0.45, 4.0);
-    splat.materialConfidence = float4((float)(h & 1023u) / 1023.0, 1.0, 0.0, 1.0);
+    splat.materialConfidence = float4((float)(h & 1023u) / 1023.0, 1.0, fieldEncoding, 1.0);
     splat.key = float4((float)index, (float)FrameIndex, (float)Depth, asfloat(h));
     Splats[index] = splat;
 }
