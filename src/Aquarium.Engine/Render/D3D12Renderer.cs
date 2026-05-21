@@ -1808,6 +1808,10 @@ public sealed class D3D12Renderer : IAquariumRenderer
         activeCommandList.SetComputeRoot32BitConstant(RootFractalConstants, (uint)activeFractalProgramTransforms.Length, 6);
         activeCommandList.SetComputeRoot32BitConstant(RootFractalConstants, activeFractalProgramTransforms.Length > 0 ? 1u : 0u, 7);
         activeCommandList.SetComputeRoot32BitConstant(RootFractalConstants, (uint)splatDispatchCount, 8);
+        activeCommandList.SetComputeRoot32BitConstant(RootFractalConstants, BitConverter.SingleToUInt32Bits(activeFractalReservoirField.PriorityFocus.X), 9);
+        activeCommandList.SetComputeRoot32BitConstant(RootFractalConstants, BitConverter.SingleToUInt32Bits(activeFractalReservoirField.PriorityFocus.Y), 10);
+        activeCommandList.SetComputeRoot32BitConstant(RootFractalConstants, BitConverter.SingleToUInt32Bits(activeFractalReservoirField.PriorityFocus.Z), 11);
+        activeCommandList.SetComputeRoot32BitConstant(RootFractalConstants, BitConverter.SingleToUInt32Bits(activeFractalReservoirField.PriorityFocus.W), 12);
     }
 
     private void CreateGpuSensorTextureViews(AquariumGpuSensorFrame sensorFrame, D3D12DescriptorSlot firstDescriptor)
@@ -2639,7 +2643,7 @@ public sealed class D3D12Renderer : IAquariumRenderer
     {
         var rootParameters = new[]
         {
-            new RootParameter(new RootConstants(0, 0, 9), ShaderVisibility.All),
+            new RootParameter(new RootConstants(0, 0, 13), ShaderVisibility.All),
             new RootParameter(RootParameterType.UnorderedAccessView, new RootDescriptor(0, 0), ShaderVisibility.All),
             new RootParameter(RootParameterType.UnorderedAccessView, new RootDescriptor(1, 0), ShaderVisibility.All),
             new RootParameter(RootParameterType.UnorderedAccessView, new RootDescriptor(2, 0), ShaderVisibility.All),

@@ -1,3 +1,4 @@
+using System.Numerics;
 using Aquarium.Engine.Render;
 
 namespace Aquarium.Engine.Fractal.Tests;
@@ -12,6 +13,7 @@ public sealed class FractalReservoirFieldContractTests
             SplatCount = 2_000_000,
             SplatUpdatesPerFrame = 50_000,
             ReservoirUpdatesPerPass = 50_000,
+            PriorityFocus = new Vector4(0.25f, -0.5f, 0.125f, 0.75f),
         };
         var scene = new AquariumSceneState
         {
@@ -23,6 +25,7 @@ public sealed class FractalReservoirFieldContractTests
         Assert.Equal(2, scene.FractalReservoirField.CandidatesPerReservoirUpdate);
         Assert.Equal(50_000, scene.FractalReservoirField.SplatUpdatesPerFrame);
         Assert.Equal(0xA17EA11u, scene.FractalReservoirField.Seed);
+        Assert.Equal(new Vector4(0.25f, -0.5f, 0.125f, 0.75f), scene.FractalReservoirField.PriorityFocus);
     }
 
     [Fact]

@@ -43,6 +43,7 @@ Console.WriteLine($"transport reservoirs (radiosity backend slice): {receipt.Rad
 Console.WriteLine($"flame states: {receipt.FlameStateCount:N0}");
 Console.WriteLine($"ifs program transforms: {receipt.ProgramTransformCount:N0}");
 Console.WriteLine($"program mode: {DescribeProgramMode(receipt.ProgramMode)}");
+Console.WriteLine($"priority focus: {receipt.PriorityFocus.X:0.###},{receipt.PriorityFocus.Y:0.###} radius {receipt.PriorityFocus.Z:0.###} strength {receipt.PriorityFocus.W:0.###}");
 Console.WriteLine($"warmup splat updates/frame: {receipt.WarmupSplatUpdatesPerFrame:N0}");
 Console.WriteLine($"splat updates/frame: {receipt.SplatUpdatesPerFrame:N0}");
 Console.WriteLine($"candidates/pass: {receipt.CandidatesPerPass}");
@@ -335,6 +336,7 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
             options.SplatCount,
             resolvedProgramTransforms.Length,
             resolvedProgramMode,
+            options.PriorityFocus,
             options.WarmupSplatUpdatesPerFrame,
             options.SplatUpdatesPerFrame,
             options.CandidatesPerPass,
@@ -461,6 +463,10 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
         commandList.SetComputeRoot32BitConstant(0, (uint)programTransformCount, 6);
         commandList.SetComputeRoot32BitConstant(0, (uint)programMode, 7);
         commandList.SetComputeRoot32BitConstant(0, (uint)splatDispatchCount, 8);
+        commandList.SetComputeRoot32BitConstant(0, BitConverter.SingleToUInt32Bits(options.PriorityFocus.X), 9);
+        commandList.SetComputeRoot32BitConstant(0, BitConverter.SingleToUInt32Bits(options.PriorityFocus.Y), 10);
+        commandList.SetComputeRoot32BitConstant(0, BitConverter.SingleToUInt32Bits(options.PriorityFocus.Z), 11);
+        commandList.SetComputeRoot32BitConstant(0, BitConverter.SingleToUInt32Bits(options.PriorityFocus.W), 12);
     }
 
     private void CopyReceiptReadback(ID3D12Resource splats, ID3D12Resource sdf, ID3D12Resource pbr, ID3D12Resource radiosity, ID3D12Resource readback, ulong splatBytes, ulong reservoirBytes)
@@ -942,7 +948,7 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
     {
         var rootParameters = new[]
         {
-            new RootParameter(new RootConstants(0, 0, 9), ShaderVisibility.All),
+            new RootParameter(new RootConstants(0, 0, 13), ShaderVisibility.All),
             new RootParameter(RootParameterType.UnorderedAccessView, new RootDescriptor(0, 0), ShaderVisibility.All),
             new RootParameter(RootParameterType.UnorderedAccessView, new RootDescriptor(1, 0), ShaderVisibility.All),
             new RootParameter(RootParameterType.UnorderedAccessView, new RootDescriptor(2, 0), ShaderVisibility.All),
@@ -988,6 +994,7 @@ internal sealed record ReceiptOptions(
     int ReservoirUpdatesPerPass,
     int ProgramTransformCount,
     int ProgramMode,
+    Vector4 PriorityFocus,
     int ReadbackSplats,
     string ShaderPath,
     string OutputDirectory,
@@ -1020,6 +1027,7 @@ internal sealed record ReceiptOptions(
             50_000,
             0,
             0,
+            Vector4.Zero,
             64,
             Path.Combine("src", "Aquarium.Engine", "Render", "Shaders", "D3D12FractalReservoirCompute.hlsl"),
             Path.Combine("artifacts", "fractal-splat-receipts"),
@@ -1054,6 +1062,7 @@ internal sealed record ReceiptOptions(
                 "--reservoir-updates" => options with { ReservoirUpdatesPerPass = int.Parse(Next()) },
                 "--program-transforms" => options with { ProgramTransformCount = int.Parse(Next()), ProgramMode = 1 },
                 "--program-flame" => options with { ProgramFlamePath = Next(), ProgramMode = 2 },
+                "--priority-focus" => options with { PriorityFocus = ParseBounds(Next(), "Priority focus") },
                 "--readback-splats" => options with { ReadbackSplats = int.Parse(Next()) },
                 "--shader" => options with { ShaderPath = Next() },
                 "--out" => options with { OutputDirectory = Next() },
@@ -1392,6 +1401,7 @@ internal sealed record GpuFractalSplatReceipt(
     int FlameStateCount,
     int ProgramTransformCount,
     int ProgramMode,
+    Vector4 PriorityFocus,
     int WarmupSplatUpdatesPerFrame,
     int SplatUpdatesPerFrame,
     int CandidatesPerPass,

@@ -463,6 +463,8 @@ public sealed class AquariumFractalReservoirField
 
     public Vector4 WorldCenterRadius { get; init; }
 
+    public Vector4 PriorityFocus { get; init; }
+
     public bool HasInput =>
         SplatCount > 0 &&
         Depth > 0 &&

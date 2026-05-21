@@ -1,3 +1,4 @@
+using System.Numerics;
 using Aquarium.Engine.Fractal;
 using Aquarium.Engine.Fractal.Brushes;
 using Aquarium.Engine.Fractal.Debug;
@@ -85,6 +86,7 @@ public static class ZyphosFractalTerrain
         var surfacePagePayloads = BuildSurfacePagePayloads(surfacePageResidency.ResidentPages);
         var projectedSurfaceSdfSplats = BuildProjectedSurfaceSdfSplats(surfacePagePayloads);
         var gpuProgramTransforms = FractalGpuProgramCompiler.CompileSelectedTree(Tree.Value, selectedCut, MaxGpuProgramTransforms);
+        var reservoirPriorityFocus = ReservoirPriorityFocusFor(shot);
         var cutKey = CutCacheKey(selectedCut);
         AquariumHeightFieldBrush[] brushes;
         lock (PlanCacheLock)
@@ -107,8 +109,17 @@ public static class ZyphosFractalTerrain
             surfacePagePayloads,
             projectedSurfaceSdfSplats,
             gpuProgramTransforms,
+            reservoirPriorityFocus,
             bucketPixelsPerWorld,
             $"{selectedCut.Length}/{Summaries.Value.Length} cuts / {brushes.Length}/{OwnershipTree.Claims.Count} brushes / {resourcePlan.UpdateNodes.Length}/{DefaultBudget.MaxCpuUpdates} cpu updates / {resourcePlan.GpuEstimatedCost:0.0}/{DefaultBudget.MaxGpuEstimatedCost:0.0} gpu cost / {resourcePlan.Residency.ResidentNodes.Count}/{DefaultBudget.MaxResidentPayloads} resident / {resourcePlan.Residency.RequestedNodes.Count}/{DefaultBudget.MaxSsdRequests} ssd requests / {(structuralProbeReservoir.HasSample ? structuralProbeReservoir.CandidateCount : 0)} probe candidates / {surfacePagePayloads.Length}/{surfacePages.Length} surface payloads / {projectedSurfaceSdfSplats.Length} projected splats / {gpuProgramTransforms.Length} gpu transforms / {bucketPixelsPerWorld:0.00} px-wu");
+    }
+
+    private static Vector4 ReservoirPriorityFocusFor(ZyphosCameraShot shot)
+    {
+        var relative = (shot.TrackedCenter - ZyphosUmbrosSystem.ZyphosCenter) / MathF.Max(ZyphosUmbrosSystem.ZyphosSurfaceRadius, 0.0001f);
+        var focusRadius = Math.Clamp(shot.EffectiveDistance / MathF.Max(ZyphosUmbrosSystem.ZyphosSurfaceRadius, 0.0001f), 0.02f, 1.6f);
+        var strength = Math.Clamp(1.0f - focusRadius * 0.35f, 0.25f, 0.9f);
+        return new Vector4(relative.X, relative.Y, focusRadius, strength);
     }
 
     private static AquariumFractalSurfacePage[] PlanSurfacePages(IReadOnlyList<AquariumSelectedCut> selectedCut)
@@ -311,5 +322,6 @@ public readonly record struct ZyphosFractalRenderPlan(
     FractalSurfacePagePayload[] SurfacePagePayloads,
     AquariumFractalSdfSplat3D[] ProjectedSurfaceSdfSplats,
     AquariumPackedFractalIfsTransform[] GpuProgramTransforms,
+    Vector4 ReservoirPriorityFocus,
     float PixelsPerWorld,
     string Summary);

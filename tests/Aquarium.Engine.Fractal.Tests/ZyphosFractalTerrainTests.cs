@@ -92,6 +92,8 @@ public sealed class ZyphosFractalTerrainTests
         Assert.Equal(20_000, scene.FractalReservoirField.ReservoirUpdatesPerPass);
         Assert.Equal(2, scene.FractalReservoirField.CandidatesPerReservoirUpdate);
         Assert.Equal(ZyphosUmbrosSystem.ZyphosSurfaceRadius, scene.FractalReservoirField.WorldCenterRadius.W);
+        Assert.True(scene.FractalReservoirField.PriorityFocus.Z > 0.0f);
+        Assert.True(scene.FractalReservoirField.PriorityFocus.W > 0.0f);
         Assert.NotEmpty(scene.FractalReservoirField.ProgramTransforms);
     }
 

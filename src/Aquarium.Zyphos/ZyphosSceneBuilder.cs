@@ -18,6 +18,7 @@ public static class ZyphosSceneBuilder
                 SplatUpdatesPerFrame = 50_000,
                 ReservoirUpdatesPerPass = 20_000,
                 WorldCenterRadius = new Vector4(ZyphosUmbrosSystem.ZyphosCenter, ZyphosUmbrosSystem.ZyphosSurfaceRadius),
+                PriorityFocus = fractalPlan.ReservoirPriorityFocus,
                 ProgramTransforms = fractalPlan.GpuProgramTransforms,
             },
             SdfObjects = BuildSdfObjects(timeSeconds, previousTimeSeconds),

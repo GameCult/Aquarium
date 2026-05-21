@@ -58,6 +58,10 @@ cbuffer ReceiptConstants : register(b0)
     uint ProgramTransformCount;
     uint ProgramMode;
     uint SplatDispatchCount;
+    float PriorityFocusX;
+    float PriorityFocusY;
+    float PriorityFocusRadius;
+    float PriorityFocusStrength;
 };
 
 RWStructuredBuffer<FractalSdfSplat> Splats : register(u0);
@@ -309,6 +313,15 @@ float3 FractalPoint(uint index, out float radius, out float fieldEncoding)
     return p;
 }
 
+float ReservoirPriorityScore(uint index, uint salt, float radius, float strength)
+{
+    FractalSdfSplat splat = Splats[index];
+    float2 delta = splat.centerRadius.xy - float2(PriorityFocusX, PriorityFocusY);
+    float nearFocus = 1.0 - smoothstep(radius, radius * 2.0, length(delta));
+    float exploration = Random01(salt);
+    return lerp(exploration, nearFocus + exploration * 0.15, strength);
+}
+
 uint ReservoirIndex(uint updateIndex, uint passKind)
 {
     if (ReservoirUpdatesPerPass >= SplatCount)
@@ -316,7 +329,30 @@ uint ReservoirIndex(uint updateIndex, uint passKind)
         return updateIndex % SplatCount;
     }
 
-    return Hash(updateIndex * 1664525u + FrameIndex * 1013904223u + passKind * 747796405u + Seed) % SplatCount;
+    uint baseSalt = updateIndex * 1664525u + FrameIndex * 1013904223u + passKind * 747796405u + Seed;
+    uint bestIndex = Hash(baseSalt) % SplatCount;
+    float strength = saturate(PriorityFocusStrength);
+    float radius = max(PriorityFocusRadius, 0.0);
+    if (strength <= 0.0 || radius <= 0.0)
+    {
+        return bestIndex;
+    }
+
+    float bestScore = ReservoirPriorityScore(bestIndex, Hash(baseSalt + 17u), radius, strength);
+    [unroll]
+    for (uint probe = 1u; probe < 4u; probe++)
+    {
+        uint candidateSalt = Hash(baseSalt + probe * 747796405u);
+        uint candidateIndex = candidateSalt % SplatCount;
+        float candidateScore = ReservoirPriorityScore(candidateIndex, candidateSalt, radius, strength);
+        if (candidateScore > bestScore)
+        {
+            bestScore = candidateScore;
+            bestIndex = candidateIndex;
+        }
+    }
+
+    return bestIndex;
 }
 
 float4 ReservoirStats(uint index, uint passKind, float baseTarget, out uint selectedCandidate)
