@@ -66,6 +66,7 @@ if (importReportPath is not null)
 }
 if (receipt.VisualParity is not null)
 {
+    Console.WriteLine($"visual parity reference: {receipt.VisualParity.ReferenceSource}");
     Console.WriteLine($"visual parity samples: {receipt.VisualParity.ComparedSamples:N0}/{receipt.VisualParity.ReferenceSamples:N0}");
     Console.WriteLine($"visual parity views: {receipt.VisualParity.Views.Count:N0}");
     Console.WriteLine($"visual parity bins: {receipt.VisualParity.Width}x{receipt.VisualParity.Height}");
@@ -474,17 +475,11 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
         int splatStride,
         int readbackSplatCount)
     {
-        if (!options.VisualParity || options.ProgramFlamePath is null || readbackSplatCount <= 0)
+        if (!options.VisualParity || readbackSplatCount <= 0)
         {
             return null;
         }
 
-        var flame = FractalFlameFileParser.ParseFirst(File.ReadAllText(options.ProgramFlamePath), unchecked((int)options.Seed));
-        var referencePoints = FractalFlameChaosGame.Generate(
-            flame,
-            options.VisualParityReferenceSamples,
-            options.HistogramBurnIn,
-            new FractalXorShiftRandom(options.Seed));
         var points = new Vector2[readbackSplatCount];
         var splats = (AquariumPackedFractalSdfSplat3D*)readback.Map<byte>(0);
         for (var index = 0; index < points.Length; index++)
@@ -497,13 +492,22 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
         var views = options.VisualParityViews.Count > 0
             ? options.VisualParityViews
             : [new VisualParityView("global", options.HistogramBounds)];
+        ReferenceDensityImage? externalReference = options.ReferenceDensityPpmPath is null
+            ? null
+            : LoadReferenceDensityPpm(options.ReferenceDensityPpmPath, options.HistogramBounds);
+        var flameReferencePoints = externalReference is null
+            ? BuildCpuFlameReferencePoints(options)
+            : null;
         var viewReceipts = new VisualParityViewReceipt[views.Count];
         for (var index = 0; index < views.Count; index++)
         {
+            var referenceHistogram = externalReference is null
+                ? FractalPointHistogramBuilder.Build(flameReferencePoints!, options.HistogramWidth, options.HistogramHeight, views[index].Bounds)
+                : externalReference.Value.ToHistogram(options.HistogramWidth, options.HistogramHeight, views[index].Bounds);
             viewReceipts[index] = BuildVisualParityView(
                 options,
                 views[index],
-                referencePoints,
+                referenceHistogram,
                 points,
                 options.HistogramWidth,
                 options.HistogramHeight);
@@ -511,8 +515,9 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
 
         var primary = viewReceipts[0];
         return new VisualParityReceipt(
+            externalReference is null ? "Aquarium CPU flame oracle" : Path.GetFullPath(options.ReferenceDensityPpmPath!),
             readbackSplatCount,
-            options.VisualParityReferenceSamples,
+            externalReference?.TotalLuminance ?? options.VisualParityReferenceSamples,
             options.HistogramWidth,
             options.HistogramHeight,
             primary.Bounds,
@@ -532,12 +537,11 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
     private static VisualParityViewReceipt BuildVisualParityView(
         ReceiptOptions options,
         VisualParityView view,
-        IReadOnlyList<Vector2> referencePoints,
+        FractalPointHistogram referenceHistogram,
         IReadOnlyList<Vector2> gpuPoints,
         int width,
         int height)
     {
-        var referenceHistogram = FractalPointHistogramBuilder.Build(referencePoints, width, height, view.Bounds);
         var gpuHistogram = FractalPointHistogramBuilder.Build(gpuPoints, width, height, view.Bounds);
         WriteVisualParityImages(options, view.Name, referenceHistogram, gpuHistogram);
         var metrics = CompareHistograms(referenceHistogram, gpuHistogram);
@@ -562,6 +566,124 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
             metrics.Rmse,
             metrics.CosineSimilarity,
             metrics.DistributionScorePercent);
+    }
+
+    private static Vector2[] BuildCpuFlameReferencePoints(ReceiptOptions options)
+    {
+        if (options.ProgramFlamePath is null)
+        {
+            throw new ArgumentException("Visual parity needs either --program-flame or --reference-density-ppm.");
+        }
+
+        var flame = FractalFlameFileParser.ParseFirst(File.ReadAllText(options.ProgramFlamePath), unchecked((int)options.Seed));
+        return FractalFlameChaosGame.Generate(
+            flame,
+            options.VisualParityReferenceSamples,
+            options.HistogramBurnIn,
+            new FractalXorShiftRandom(options.Seed));
+    }
+
+    private static ReferenceDensityImage LoadReferenceDensityPpm(string path, Vector4 bounds)
+    {
+        var bytes = File.ReadAllBytes(path);
+        var cursor = 0;
+        var magic = ReadPpmToken(bytes, ref cursor);
+        if (!magic.SequenceEqual("P6"u8))
+        {
+            throw new FormatException("External density reference must be a binary P6 PPM image.");
+        }
+
+        var width = ParsePositivePpmInt(ReadPpmToken(bytes, ref cursor), "width");
+        var height = ParsePositivePpmInt(ReadPpmToken(bytes, ref cursor), "height");
+        var max = ParsePositivePpmInt(ReadPpmToken(bytes, ref cursor), "max channel value");
+        if (max > 255)
+        {
+            throw new FormatException("External density reference must be 8-bit PPM.");
+        }
+
+        ConsumePpmWhitespace(bytes, ref cursor);
+        var expectedBytes = checked(width * height * 3);
+        if (bytes.Length - cursor < expectedBytes)
+        {
+            throw new FormatException("External density reference ended before all RGB pixels were present.");
+        }
+
+        var luminance = new int[width * height];
+        var total = 0L;
+        var pixels = bytes.AsSpan(cursor, expectedBytes);
+        for (var source = 0; source < pixels.Length; source += 3)
+        {
+            var r = pixels[source];
+            var g = pixels[source + 1];
+            var b = pixels[source + 2];
+            var value = ((r * 54) + (g * 183) + (b * 19)) >> 8;
+            var pixelIndex = source / 3;
+            luminance[pixelIndex] = value;
+            total += value;
+        }
+
+        return new ReferenceDensityImage(width, height, bounds, luminance, Math.Max(total, 1L));
+    }
+
+    private static ReadOnlySpan<byte> ReadPpmToken(ReadOnlySpan<byte> bytes, ref int cursor)
+    {
+        while (cursor < bytes.Length)
+        {
+            if (bytes[cursor] is (byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\n')
+            {
+                cursor++;
+                continue;
+            }
+
+            if (bytes[cursor] != (byte)'#')
+            {
+                break;
+            }
+
+            while (cursor < bytes.Length && bytes[cursor] != (byte)'\n')
+            {
+                cursor++;
+            }
+        }
+
+        var start = cursor;
+        while (cursor < bytes.Length && bytes[cursor] is not ((byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\n' or (byte)'#'))
+        {
+            cursor++;
+        }
+
+        if (cursor == start)
+        {
+            throw new FormatException("PPM header ended unexpectedly.");
+        }
+
+        return bytes.Slice(start, cursor - start);
+    }
+
+    private static void ConsumePpmWhitespace(ReadOnlySpan<byte> bytes, ref int cursor)
+    {
+        if (cursor >= bytes.Length || bytes[cursor] is not ((byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\n'))
+        {
+            throw new FormatException("PPM header is missing the pixel-data separator.");
+        }
+
+        cursor++;
+    }
+
+    private static int ParsePositivePpmInt(ReadOnlySpan<byte> token, string name)
+    {
+        var value = 0;
+        foreach (var digit in token)
+        {
+            if (digit is < (byte)'0' or > (byte)'9')
+            {
+                throw new FormatException($"PPM {name} is not an integer.");
+            }
+
+            value = checked((value * 10) + digit - (byte)'0');
+        }
+
+        return value > 0 ? value : throw new FormatException($"PPM {name} must be positive.");
     }
 
     private static void WriteVisualParityImages(
@@ -765,6 +887,7 @@ internal sealed record ReceiptOptions(
     string OutputDirectory,
     string? FlamePath,
     string? ReferencePpmPath,
+    string? ReferenceDensityPpmPath,
     string? ProgramFlamePath,
     int HistogramSamples,
     int HistogramBurnIn,
@@ -794,6 +917,7 @@ internal sealed record ReceiptOptions(
             64,
             Path.Combine("src", "Aquarium.Engine", "Render", "Shaders", "D3D12FractalReservoirCompute.hlsl"),
             Path.Combine("artifacts", "fractal-splat-receipts"),
+            null,
             null,
             null,
             null,
@@ -829,6 +953,7 @@ internal sealed record ReceiptOptions(
                 "--out" => options with { OutputDirectory = Next() },
                 "--flame" => options with { FlamePath = Next() },
                 "--reference-ppm" => options with { ReferencePpmPath = Next() },
+                "--reference-density-ppm" => options with { ReferenceDensityPpmPath = Next(), VisualParity = true },
                 "--histogram-samples" => options with { HistogramSamples = int.Parse(Next()) },
                 "--histogram-burn-in" => options with { HistogramBurnIn = int.Parse(Next()) },
                 "--histogram-size" => ParseHistogramSize(options, Next()),
@@ -872,6 +997,11 @@ internal sealed record ReceiptOptions(
             throw new FileNotFoundException("Receipt program flame file was not found.", options.ProgramFlamePath);
         }
 
+        if (options.ReferenceDensityPpmPath is not null && !File.Exists(options.ReferenceDensityPpmPath))
+        {
+            throw new FileNotFoundException("External density reference PPM file was not found.", options.ReferenceDensityPpmPath);
+        }
+
         options = options.ProgramFlamePath is not null && options.ProgramTransformCount <= 0
             ? options with { ProgramTransformCount = int.MaxValue, ProgramMode = 2 }
             : options;
@@ -884,9 +1014,9 @@ internal sealed record ReceiptOptions(
             throw new FileNotFoundException("Receipt shader file was not found.", options.ShaderPath);
         }
 
-        if (options.VisualParity && options.ProgramFlamePath is null)
+        if (options.VisualParity && options.ProgramFlamePath is null && options.ReferenceDensityPpmPath is null)
         {
-            throw new ArgumentException("Visual parity requires --program-flame so the GPU distribution has a CPU flame oracle.");
+            throw new ArgumentException("Visual parity requires --program-flame or --reference-density-ppm.");
         }
 
         if (options.SplatCount <= 0 || options.WarmupSplatUpdatesPerFrame <= 0 || options.WarmupSplatUpdatesPerFrame > options.SplatCount || options.SplatUpdatesPerFrame <= 0 || options.SplatUpdatesPerFrame > options.SplatCount || options.WarmupFrames < 0 || options.MeasuredFrames <= 0 || options.Depth <= 0 || options.CandidatesPerPass <= 0 || options.ReservoirUpdatesPerPass <= 0 || options.ReservoirUpdatesPerPass > options.SplatCount || options.ProgramTransformCount < 0 || options.ProgramMode < 0 || options.ProgramMode > 2 || options.ReadbackSplats < 0 || options.VisualParityReferenceSamples <= 0)
@@ -977,9 +1107,56 @@ internal sealed record FlameImportReportReceipt(
 
 internal readonly record struct VisualParityView(string Name, Vector4 Bounds);
 
+internal readonly record struct ReferenceDensityImage(
+    int Width,
+    int Height,
+    Vector4 Bounds,
+    int[] Luminance,
+    long TotalLuminance)
+{
+    public FractalPointHistogram ToHistogram(int width, int height, Vector4 viewBounds)
+    {
+        var bins = new int[width * height];
+        var sourceSpan = new Vector2(Bounds.Z - Bounds.X, Bounds.W - Bounds.Y);
+        var viewSpan = new Vector2(viewBounds.Z - viewBounds.X, viewBounds.W - viewBounds.Y);
+        for (var sourceY = 0; sourceY < Height; sourceY++)
+        {
+            var worldY = Bounds.Y + ((Height - 0.5f - sourceY) / Math.Max(Height, 1)) * sourceSpan.Y;
+            var v = (worldY - viewBounds.Y) / MathF.Max(viewSpan.Y, 0.000001f);
+            if (v < 0.0f || v >= 1.0f)
+            {
+                continue;
+            }
+
+            var targetY = Math.Clamp((int)(v * height), 0, height - 1);
+            for (var sourceX = 0; sourceX < Width; sourceX++)
+            {
+                var value = Luminance[(sourceY * Width) + sourceX];
+                if (value == 0)
+                {
+                    continue;
+                }
+
+                var worldX = Bounds.X + ((sourceX + 0.5f) / Math.Max(Width, 1)) * sourceSpan.X;
+                var u = (worldX - viewBounds.X) / MathF.Max(viewSpan.X, 0.000001f);
+                if (u < 0.0f || u >= 1.0f)
+                {
+                    continue;
+                }
+
+                var targetX = Math.Clamp((int)(u * width), 0, width - 1);
+                bins[(targetY * width) + targetX] += value;
+            }
+        }
+
+        return new FractalPointHistogram(width, height, viewBounds, bins);
+    }
+}
+
 internal sealed record VisualParityReceipt(
+    string ReferenceSource,
     int ComparedSamples,
-    int ReferenceSamples,
+    long ReferenceSamples,
     int Width,
     int Height,
     float[] Bounds,

@@ -13,6 +13,7 @@ param(
     [int]$VisualParityReferenceSamples = 1000000,
     [string]$HistogramSize = "64x64",
     [string]$HistogramBounds = "-8,-8,8,8",
+    [string]$ReferenceDensityPpm = "",
     [string[]]$VisualParityView = @(),
     [string]$VisualParityImageDirectory = "",
     [string]$VisualParityImagePrefix = "visual-parity",
@@ -28,13 +29,15 @@ if (-not [string]::IsNullOrWhiteSpace($ProgramFlame)) {
 }
 
 $parityArgs = @()
-if ($VisualParity) {
+if ($VisualParity -or -not [string]::IsNullOrWhiteSpace($ReferenceDensityPpm)) {
     $parityArgs = @(
-        "--visual-parity",
         "--visual-parity-reference-samples", "$VisualParityReferenceSamples",
         "--histogram-size", $HistogramSize,
         "--histogram-bounds", $HistogramBounds
     )
+    if ($VisualParity) {
+        $parityArgs = @("--visual-parity") + $parityArgs
+    }
     foreach ($view in $VisualParityView) {
         $parityArgs += @("--visual-parity-view", $view)
     }
@@ -42,6 +45,10 @@ if ($VisualParity) {
         $parityImageDir = if ([System.IO.Path]::IsPathRooted($VisualParityImageDirectory)) { $VisualParityImageDirectory } else { Join-Path $repoRoot $VisualParityImageDirectory }
         $parityArgs += @("--visual-parity-image-dir", $parityImageDir, "--visual-parity-image-prefix", $VisualParityImagePrefix)
     }
+}
+if (-not [string]::IsNullOrWhiteSpace($ReferenceDensityPpm)) {
+    $referenceDensityPpmPath = if ([System.IO.Path]::IsPathRooted($ReferenceDensityPpm)) { $ReferenceDensityPpm } else { Join-Path $repoRoot $ReferenceDensityPpm }
+    $parityArgs += @("--reference-density-ppm", $referenceDensityPpmPath)
 }
 
 dotnet run --project (Join-Path $repoRoot "tools\Aquarium.Fractal.Receipt\Aquarium.Fractal.Receipt.csproj") -c Release -- `

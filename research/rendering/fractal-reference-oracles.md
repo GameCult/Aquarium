@@ -129,6 +129,63 @@ Apophysis-style minimal XML rather than full JWildfire `variationGroup` flame
 XML. Do not "fix" that by making the fixture bigger until the parser and DSL
 contract deliberately support the richer reference dialect.
 
+## External Density Oracle
+
+Aquarium's CPU flame oracle is no longer the only visual-parity target. The GPU
+receipt can compare Aquarium splat density against a binary PPM image rendered
+by an external renderer:
+
+```powershell
+.\scripts\new-jwildfire-baby-fixture.ps1
+.\scripts\fractal-flame-jwildfire-reference.ps1 `
+  -Renderer FARender `
+  -Flame artifacts\fractal-flame-jwildfire-reference\julian-disc-baby.flame `
+  -Width 768 `
+  -Height 768 `
+  -Quality 2000 `
+  -OutputDirectory artifacts\fractal-flame-jwildfire-reference
+magick artifacts\fractal-flame-jwildfire-reference\julian-disc-baby-farender-*.png `
+  -depth 8 artifacts\fractal-flame-jwildfire-reference\julian-disc-baby-farender.ppm
+.\scripts\fractal-splat-receipt.ps1 `
+  -ProgramFlame artifacts\fractal-flame-jwildfire-reference\julian-disc-baby.flame `
+  -Splats 2000000 `
+  -WarmupSplatUpdates 2000000 `
+  -SplatUpdates 50000 `
+  -Warmup 8 `
+  -Frames 10 `
+  -Depth 8 `
+  -ReservoirUpdates 15000 `
+  -ReadbackSplats 1000000 `
+  -ReferenceDensityPpm artifacts\fractal-flame-jwildfire-reference\julian-disc-baby-farender.ppm `
+  -HistogramSize 256x256 `
+  -HistogramBounds '-2,-2,2,2'
+```
+
+`new-jwildfire-baby-fixture.ps1` derives a smaller, reproducible target from
+FARender's bundled `selftest.flame`, preserving the boilerplate FARender needs
+while reducing the nastier variation pressure: `jwf_julian_power` drops from
+`126` to `8`, `jwf_gaussian_blur` becomes `0`, and the `wfield_*` amount fields
+are set to zero. This is not a pristine flame design. It is a compatible rung
+on the ladder that FARender actually renders.
+
+First external-density receipt, local GTX 1070, 2026-05-21:
+
+- reference renderer: JWildfire 9.00 bundled FARenderJWF
+- fixture: `artifacts/fractal-flame-jwildfire-reference/julian-disc-baby.flame`
+- reference render: `768x768`, quality `2000`, CUDA
+- Aquarium steady GPU time: `1.145 ms/frame`, `873.4 FPS` equivalent
+- external density score: `15.33%` in `256x256` bounds `-2,-2,2,2`
+- score sweep at `128x128`: best tested bound was `-4,-4,4,4` at `32.95%`
+- contact sheet:
+  `artifacts/fractal-flame-jwildfire-reference/julian-disc-baby-external-contact.png`
+
+The low external score is useful. Aquarium still scores about `89.94%` against
+its CPU interpretation of the same baby fixture in `128x128` bounds
+`-4,-4,4,4`, while FARender density disagrees hard. That means the next work is
+not "more samples"; it is dialect and camera semantics: FARender flame camera
+mapping, color/density filtering, chaos/xaos and weighting-field behavior, and
+variation exactness.
+
 ## JWildfire Selftest Faceplant
 
 Running JWildfire's bundled `selftest.flame` through Aquarium is the correct
