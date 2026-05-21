@@ -80,7 +80,7 @@ if (receipt.VisualParity is not null)
     Console.WriteLine($"visual parity cosine: {receipt.VisualParity.CosineSimilarity:0.000000}");
     foreach (var view in receipt.VisualParity.Views)
     {
-        Console.WriteLine($"visual view {view.Name}: score {view.DistributionScorePercent:0.00}% / hits gpu {view.GpuHitCount:N0}, ref {view.ReferenceHitCount:N0} / starved bins {view.StarvedReferenceBins:N0} / under-mass {view.UnderrepresentedMassPercent:0.00}%");
+        Console.WriteLine($"visual view {view.Name}: score {view.DistributionScorePercent:0.00}% / hits gpu {view.GpuHitCount:N0}, ref {view.ReferenceHitCount:N0} / starved bins {view.StarvedReferenceBins:N0} / under-mass {view.UnderrepresentedMassPercent:0.00}% / suggested focus {view.SuggestedPriorityFocus[0]:0.###},{view.SuggestedPriorityFocus[1]:0.###},{view.SuggestedPriorityFocus[2]:0.###},{view.SuggestedPriorityFocus[3]:0.###}");
     }
 }
 Console.WriteLine($"receipt: {receiptPath}");
@@ -657,6 +657,7 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
     {
         WriteVisualParityImages(options, view.Name, referenceHistogram, candidateHistogram);
         var metrics = CompareHistograms(referenceHistogram, candidateHistogram);
+        var suggestedFocus = FractalHistogramResidualFocus.Estimate(referenceHistogram, candidateHistogram);
         return new VisualParityViewReceipt(
             view.Name,
             [
@@ -674,6 +675,12 @@ internal sealed class GpuFractalSplatReceiptRunner : IDisposable
             metrics.OccupancyOverlapPercent,
             metrics.UnderrepresentedMassPercent,
             metrics.OversampledMassPercent,
+            [
+                suggestedFocus.X,
+                suggestedFocus.Y,
+                suggestedFocus.Z,
+                suggestedFocus.W,
+            ],
             metrics.L1Distance,
             metrics.Rmse,
             metrics.CosineSimilarity,
@@ -1374,6 +1381,7 @@ internal sealed record VisualParityViewReceipt(
     double OccupancyOverlapPercent,
     double UnderrepresentedMassPercent,
     double OversampledMassPercent,
+    float[] SuggestedPriorityFocus,
     double L1Distance,
     double Rmse,
     double CosineSimilarity,
