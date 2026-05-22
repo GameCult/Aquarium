@@ -4,6 +4,7 @@ namespace Aquarium.Engine.Audio;
 
 internal sealed class WasapiAudioDevice : IDisposable
 {
+    private static readonly bool TraceAudio = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("AQUARIUM_AUDIO_TRACE"));
     private readonly object sync = new();
     private readonly List<Voice> voices = [];
     private readonly Thread thread;
@@ -39,6 +40,12 @@ internal sealed class WasapiAudioDevice : IDisposable
         lock (sync)
         {
             voices.Add(new Voice(copy, Math.Clamp(leftGain, 0.0f, 4.0f), Math.Clamp(rightGain, 0.0f, 4.0f)));
+            if (TraceAudio)
+            {
+                Console.WriteLine(
+                    $"Aquarium WASAPI voice queued: sourceFrames={monoSamples.Length} outputFrames={copy.Length} sourceRate={sourceSampleRate} outputRate={outputSampleRate} voices={voices.Count}");
+            }
+
             if (voices.Count > 64)
             {
                 voices.RemoveRange(0, voices.Count - 64);
@@ -242,7 +249,7 @@ internal sealed class WasapiAudioDevice : IDisposable
             return [];
         }
 
-        var targetLength = Math.Max(1, (int)MathF.Ceiling(source.Length * targetSampleRate / (float)sourceSampleRate));
+        var targetLength = Math.Max(1, (int)Math.Ceiling(source.Length * (targetSampleRate / (double)sourceSampleRate)));
         var target = new float[targetLength];
         var ratio = sourceSampleRate / (float)targetSampleRate;
         for (var index = 0; index < target.Length; index++)

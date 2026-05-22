@@ -5,6 +5,7 @@ namespace Aquarium.Engine.Audio;
 internal sealed class AquariumSynthHost : IDisposable
 {
     private const float CompileDebounceSeconds = 0.75f;
+    private static readonly bool TraceAudio = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("AQUARIUM_AUDIO_TRACE"));
 
     private readonly Dictionary<string, PatchRuntime> patches = new(StringComparer.Ordinal);
     private readonly WasapiAudioDevice audioDevice = new();
@@ -16,6 +17,12 @@ internal sealed class AquariumSynthHost : IDisposable
         timeSeconds += Math.Max(deltaSeconds, 0.0f);
         foreach (var chunk in audio.DrainPcmChunks())
         {
+            if (TraceAudio)
+            {
+                Console.WriteLine(
+                    $"Aquarium audio drain: frames={chunk.MonoSamples.Length} sampleRate={chunk.SampleRate} leftGain={chunk.LeftGain:0.###} rightGain={chunk.RightGain:0.###}");
+            }
+
             audioDevice.Play(chunk.MonoSamples, chunk.SampleRate, chunk.LeftGain, chunk.RightGain);
         }
 
