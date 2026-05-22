@@ -5,7 +5,7 @@ namespace Aquarium.Fensalir;
 
 public static class FensalirSceneBuilder
 {
-    private static readonly Vector3 SpineCenter = new(0.0f, -0.55f, 2.9f);
+    private static readonly Vector3 SpineCenter = new(0.0f, -0.12f, 2.65f);
     private const float SpineBoundRadius = 5.8f;
 
     public static AquariumSceneState Build(float timeSeconds, float previousTimeSeconds)

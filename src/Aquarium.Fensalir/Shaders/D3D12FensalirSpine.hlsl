@@ -117,9 +117,8 @@ float sdfDistance(float3 p, int sdfIndex)
     SdfObject scene = sdfObjects[sdfIndex];
     float3 local = p - scene.centerRadius.xyz;
     float spine = fensalirSpineDistance(local);
-    float pillars = fensalirPillarDistance(local);
     float reeds = fensalirReedDistance(local);
-    return min(spine, min(pillars, reeds));
+    return min(spine, reeds);
 }
 
 SdfSurface sdfSurface(float3 p, int sdfIndex)
@@ -127,9 +126,8 @@ SdfSurface sdfSurface(float3 p, int sdfIndex)
     SdfObject scene = sdfObjects[sdfIndex];
     float3 local = p - scene.centerRadius.xyz;
     float spine = fensalirSpineDistance(local);
-    float pillars = fensalirPillarDistance(local);
     float reeds = fensalirReedDistance(local);
-    float nearest = min(spine, min(pillars, reeds));
+    float nearest = min(spine, reeds);
 
     float rune = pow(saturate(1.0 - abs(frac(local.z * 3.7 + local.x * 0.31) - 0.5) * 16.0), 2.6);
     float coreGlow = pow(saturate(1.0 - length(local.xy) * 5.2), 2.0);
@@ -148,13 +146,6 @@ SdfSurface sdfSurface(float3 p, int sdfIndex)
         surface.baseColor = float3(0.35, 0.86, 0.98);
         surface.roughness = 0.06;
         surface.emission = float3(0.35, 1.55, 2.45) * (2.0 + coreGlow * 5.6 + rune * 2.4);
-    }
-    else if (nearest == pillars)
-    {
-        surface.baseColor = float3(0.018, 0.030, 0.034);
-        surface.metallic = 0.35;
-        surface.roughness = 0.34;
-        surface.emission = float3(0.75, 0.03, 0.48) * (0.13 + magentaEdge + rune * 0.10);
     }
     else
     {

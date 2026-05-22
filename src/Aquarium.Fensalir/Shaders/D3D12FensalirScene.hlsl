@@ -195,6 +195,136 @@ float fractalNoise3(float3 p)
     return sum;
 }
 
+float sdSegment2(float2 p, float2 a, float2 b)
+{
+    float2 pa = p - a;
+    float2 ba = b - a;
+    float h = saturate(dot(pa, ba) / max(dot(ba, ba), 0.0001));
+    return length(pa - ba * h);
+}
+
+float lineGlow(float2 p, float2 a, float2 b, float thickness)
+{
+    return exp(-sdSegment2(p, a, b) / max(thickness, 0.0001));
+}
+
+float diamondOutline(float2 p, float2 center, float2 radius, float thickness)
+{
+    float2 q = abs(p - center) / max(radius, 0.001);
+    float d = abs(q.x + q.y - 1.0) * min(radius.x, radius.y);
+    return exp(-d / max(thickness, 0.0001));
+}
+
+float verticalPane(float2 p, float x, float z0, float z1, float width)
+{
+    float heightMask = smoothstep(z0 - 0.02, z0 + 0.02, p.y) * smoothstep(z1 + 0.02, z1 - 0.02, p.y);
+    return exp(-abs(p.x - x) / max(width, 0.0001)) * heightMask;
+}
+
+float reedSilhouette(float2 p, float x, float tilt, float height)
+{
+    float2 a = float2(x, -0.42);
+    float2 b = float2(x + tilt, -0.42 + height);
+    return exp(-sdSegment2(p, a, b) / 0.004) * smoothstep(0.32, -0.28, p.y);
+}
+
+float3 cathedralRadiance(float3 direction)
+{
+    float2 p = float2(direction.x * 1.22, direction.z);
+    float verticalMask = smoothstep(-0.22, 0.08, p.y) * smoothstep(0.98, 0.68, p.y);
+    float horizonMask = exp(-abs(p.y + 0.115) * 42.0);
+
+    float centerAxis = exp(-abs(p.x) / 0.004) * smoothstep(-0.22, 0.72, p.y);
+    float diamonds = 0.0;
+    diamonds += diamondOutline(p, float2(0.0, 0.00), float2(0.15, 0.12), 0.004);
+    diamonds += diamondOutline(p, float2(0.0, 0.20), float2(0.19, 0.15), 0.0045);
+    diamonds += diamondOutline(p, float2(0.0, 0.43), float2(0.24, 0.18), 0.005);
+    diamonds += diamondOutline(p, float2(0.0, 0.70), float2(0.15, 0.15), 0.004);
+
+    float ribs = 0.0;
+    ribs += lineGlow(p, float2(-0.15, -0.05), float2(0.0, 0.11), 0.006);
+    ribs += lineGlow(p, float2(0.15, -0.05), float2(0.0, 0.11), 0.006);
+
+    float panes = smoothstep(0.07, 0.0, abs(p.x)) * verticalMask * 0.35;
+    panes += smoothstep(0.23, 0.0, abs(p.x)) * smoothstep(-0.18, 0.14, p.y) * smoothstep(0.62, 0.24, p.y) * 0.20;
+
+    float sideGlass = 0.0;
+    [unroll]
+    for (int index = 0; index < 8; index++)
+    {
+        float t = (float)index;
+        float spread = 0.30 + t * 0.075;
+        float height = 0.14 + t * 0.07;
+        float fade = 1.0 - t * 0.075;
+        sideGlass += verticalPane(p, -spread, -0.18, height, 0.0025 + t * 0.00045) * fade;
+        sideGlass += verticalPane(p, spread, -0.18, height, 0.0025 + t * 0.00045) * fade;
+        sideGlass += lineGlow(p, float2(-spread, -0.16), float2(-spread * 0.74, height - 0.08), 0.0028) * fade * 0.18;
+        sideGlass += lineGlow(p, float2(spread, -0.16), float2(spread * 0.74, height - 0.08), 0.0028) * fade * 0.18;
+    }
+
+    float patchField = max(0.0, abs(terrainHeight(float2(direction.x * 8.0, direction.z * 5.8 + 1.1))) - 0.022);
+    float patchSpark = smoothstep(0.002, 0.018, patchField) * smoothstep(-0.2, 0.72, p.y);
+    float dustNoise = fractalNoise3(float3(p * 16.0, 9.0));
+    float goldDust = pow(saturate(dustNoise - 0.48), 7.0) * (sideGlass + patchSpark) * 0.9;
+
+    float sideMagenta = (verticalPane(p, -0.46, -0.18, 0.18, 0.02) + verticalPane(p, 0.46, -0.18, 0.18, 0.02)) * 0.45;
+    float cyanCore = centerAxis * 1.35 + diamonds * 0.86 + ribs * 0.30 + panes * 0.40;
+    float3 color = float3(0.18, 1.35, 2.05) * cyanCore;
+    color += float3(0.05, 0.52, 0.78) * sideGlass * 0.025;
+    color += float3(1.25, 0.12, 0.74) * (sideMagenta * 0.20 + horizonMask * 0.10);
+    color += float3(1.0, 0.68, 0.24) * goldDust;
+    return color;
+}
+
+float3 screenCathedralRadiance(float2 uv)
+{
+    float2 p = float2(uv.x - 0.5, uv.y);
+    float3 color = 0.0;
+
+    float horizon = exp(-abs(p.y - 0.345) * 82.0);
+    color += float3(1.12, 0.07, 0.68) * horizon * smoothstep(0.48, 0.08, abs(p.x)) * 0.42;
+
+    float axis = exp(-abs(p.x) / 0.0018) * smoothstep(0.16, 0.38, p.y) * smoothstep(1.03, 0.52, p.y);
+    float diamond = 0.0;
+    diamond += diamondOutline(p, float2(0.0, 0.39), float2(0.070, 0.075), 0.0022);
+    diamond += diamondOutline(p, float2(0.0, 0.52), float2(0.082, 0.085), 0.0023);
+    diamond += diamondOutline(p, float2(0.0, 0.66), float2(0.115, 0.105), 0.0024);
+    diamond += diamondOutline(p, float2(0.0, 0.80), float2(0.070, 0.078), 0.0020);
+    color += float3(0.18, 1.55, 2.3) * (axis * 0.70 + diamond * 0.65);
+
+    float paneFill = smoothstep(0.11, 0.0, abs(p.x)) * smoothstep(0.30, 0.48, p.y) * smoothstep(0.90, 0.58, p.y);
+    color += float3(0.06, 0.55, 0.72) * paneFill * 0.18;
+
+    [unroll]
+    for (int index = 0; index < 10; index++)
+    {
+        float t = (float)index;
+        float x = 0.105 + t * 0.034;
+        float top = 0.52 + t * 0.032;
+        float fade = saturate(1.0 - t * 0.055);
+        float left = verticalPane(p, -x, 0.31, top, 0.0016) * fade;
+        float right = verticalPane(p, x, 0.31, top, 0.0016) * fade;
+        color += float3(0.05, 0.52, 0.70) * (left + right) * 0.28;
+        color += float3(1.0, 0.10, 0.68) * (left + right) * smoothstep(0.14, 0.34, abs(p.x)) * 0.20;
+    }
+
+    float magentaGlass = 0.0;
+    magentaGlass += lineGlow(p, float2(-0.36, 0.31), float2(-0.22, 0.43), 0.0022);
+    magentaGlass += lineGlow(p, float2(0.36, 0.31), float2(0.22, 0.43), 0.0022);
+    magentaGlass += lineGlow(p, float2(-0.27, 0.38), float2(-0.16, 0.50), 0.0019);
+    magentaGlass += lineGlow(p, float2(0.27, 0.38), float2(0.16, 0.50), 0.0019);
+    color += float3(1.15, 0.12, 0.72) * magentaGlass * 0.26;
+
+    float ripple = exp(-abs(p.x) / 0.028) * smoothstep(0.31, 0.16, p.y) * smoothstep(0.02, 0.13, p.y);
+    ripple *= 0.42 + 0.58 * pow(saturate(fractalNoise3(float3(p * 38.0, 2.0)) - 0.20), 2.0);
+    color += float3(0.11, 1.25, 2.2) * ripple * 0.46;
+
+    float goldNoise = fractalNoise3(float3(p * 54.0, 5.0));
+    float dust = pow(saturate(goldNoise - 0.56), 12.0) * smoothstep(0.25, 0.42, p.y) * smoothstep(0.82, 0.52, p.y);
+    color += float3(1.0, 0.72, 0.28) * dust * 0.38;
+    return color;
+}
+
 float3 backgroundRadiance(float3 direction)
 {
     float horizon = smoothstep(-0.28, 0.34, direction.z);
@@ -215,7 +345,7 @@ float3 backgroundRadiance(float3 direction)
     float3 cathedral = float3(0.10, 0.66, 0.88) * cathedralPane * (0.22 + verticalShard * 0.35);
     cathedral += float3(1.15, 0.16, 0.72) * cathedralPane * smoothstep(0.12, 0.52, abs(direction.x)) * 0.16;
     cathedral += float3(1.0, 0.74, 0.28) * runeDust * 0.22;
-    return voidColor + cyan + magenta + mist + cathedral;
+    return voidColor + cyan + magenta + mist + cathedral + cathedralRadiance(direction) * 0.08;
 }
 
 float3 surfaceMirrorRadiance(float3 p, float3 direction, out float3 normal)
@@ -229,13 +359,18 @@ float3 surfaceMirrorRadiance(float3 p, float3 direction, out float3 normal)
     float magentaLeft = exp(-abs(p.x + 2.35) * 3.2) * smoothstep(2.4, -2.2, p.y);
     float magentaRight = exp(-abs(p.x - 2.35) * 3.2) * smoothstep(2.4, -2.2, p.y);
     float rippleSparkle = pow(saturate(fractalNoise3(float3(p.xy * 5.2, timeSeconds * 0.22)) - 0.47), 5.0);
+    float waterline = exp(-abs(p.y - 0.95) * 2.1) * smoothstep(4.8, 0.2, abs(p.x));
+    float reedMask = 0.0;
+    reedMask += reedSilhouette(float2(p.x * 0.22 - 1.18, p.y * 0.16 - 0.34), -0.05, -0.10, 0.45);
+    reedMask += reedSilhouette(float2(p.x * 0.20 + 1.18, p.y * 0.16 - 0.34), 0.02, 0.08, 0.36);
     float fresnel = pow(1.0 - saturate(dot(normal, -direction)), 3.0);
 
     float3 baseWater = float3(0.002, 0.014, 0.017);
-    float3 cyan = float3(0.35, 1.40, 2.35) * spineReflection * (0.38 + rippleSparkle * 0.55);
-    float3 magenta = float3(1.10, 0.08, 0.74) * (magentaLeft + magentaRight) * 0.12;
-    float3 gold = float3(1.0, 0.72, 0.26) * rippleSparkle * 0.032;
-    return baseWater + reflected * (0.16 + fresnel * 0.28) + cyan + magenta + gold;
+    float3 cyan = float3(0.35, 1.40, 2.35) * spineReflection * (0.26 + rippleSparkle * 0.32);
+    float3 magenta = float3(1.10, 0.08, 0.74) * ((magentaLeft + magentaRight) * 0.08 + waterline * 0.055);
+    float3 gold = float3(1.0, 0.72, 0.26) * (rippleSparkle * 0.032 + waterline * rippleSparkle * 0.08);
+    float3 water = baseWater + reflected * (0.18 + fresnel * 0.32) + cyan + magenta + gold;
+    return lerp(water, float3(0.0, 0.002, 0.002), saturate(reedMask));
 }
 
 RayMarchResult traverseRay(float3 origin, float3 direction)
@@ -271,6 +406,7 @@ SceneOut D3D12ScenePS(VertexOut input)
     float3 rayDirection = rayDirectionForPixel(pixel, jitterPixels, cameraPosition, cameraTarget);
 
     RayMarchResult result = traverseRay(cameraPosition, rayDirection);
+    result.color += screenCathedralRadiance(screenUv);
 
     SceneOut output;
     output.colorTravel = float4(result.color, min(result.travel, farDistance + 1.0));

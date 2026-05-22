@@ -60,7 +60,7 @@ current_model:
     splash_prompt: research/rendering/fensalir-spine-emblem-ifs-demo.md
     ground_truth_image: src/Aquarium.Engine/Assets/Fensalir-Splash.png
     fixed_capture: scripts/capture-fensalir-frame.ps1
-    latest_capture: artifacts/fensalir-captures/fixed-cathedral-forward.png
+    latest_capture: artifacts/fensalir-captures/fixed-cathedral-guide-clean.png
     purpose: >
       First artistic Fensalir reconstruction client: loads a .aquageo scene
       patch, lowers marsh/water surface claims into shaped 2D ripple brushes,
@@ -183,6 +183,7 @@ renderer_state:
     - FractalFlameIterationState and FractalFlameIterationStepper define the persistent flame iteration invariant before GPU lowering: advancing a sample in chunks must match a one-shot advance from the same state. This is a parity/mock boundary for the future GPU state buffer, not a runtime CPU renderer.
     - D3D12 capacity logging now reports active fractal reservoir resident MiB, splat count, visible debug splat count, updates/pass, and candidates/update so the GPU cache has a receipt in normal runtime logs, not just in the standalone benchmark.
     - Fensalir has a fixed headless art-repro capture lane: `scripts/capture-fensalir-frame.ps1` builds disposable engine/client slots, launches the Fensalir client headless at an explicit resolution, waits for a ready frame, and writes a PNG through `IAquariumRenderer.SaveFramePng`. Headless capture disables overlay debug UI and locks the Fensalir camera/time so shader and `.aquageo` changes can be compared against `src/Aquarium.Engine/Assets/Fensalir-Splash.png` without manual window judgment.
+    - Fensalir currently has a temporary transparent cathedral guide in the scene shader to make splash-composition failures visible in fixed captures. This is scaffolding, not final architecture: the next coherent cut is a patch-lowered pane/rune/material field target separate from the marsh height field, so the cathedral glass/runes/waterline glow are authored DSL claims instead of hardcoded screen-space guidance.
     - The consolidated fractal brush architecture plan defines the intended pipeline: client intent -> domain roots -> semantic IFS brush grammar -> ownership tree -> node summaries -> contribution cache/residency scheduler -> backend packets -> renderer passes -> debug/evidence, with explicit module boundaries and mockable unit-test seams.
     - The Perfect Machine architecture lives in docs/perfect-machine-architecture.md. It is the current waterfall design authority for fast 2D/3D/projected scalar-field splats, Form/Appearance/Transport reservoir layers, SDF level-set surfaces for opaque solids, density/extinction/confidence fields for flames and sensor fusion, IFS `.aquageo` structural probes, Mimir-style camera/audio evidence candidates, ReSTIR/GRIS reservoir reuse, heuristic occupancy graph updates, resource-tier residency, and TAA guide-buffer integration.
     - Fractal surface page planning now has a CPU boundary: FractalSurfacePagePlanner lowers selected IFS cuts into stable height, 2D signed-distance, material, and confidence page metadata; ZyphosFractalRenderPlan exposes these pages, while the live D3D12 page store and atlas remain future work.
@@ -219,6 +220,7 @@ next_actions:
   - Follow research/rendering/fractal-brush-architecture-plan.md before implementing the fractal brush DSL, IFS LOD cache, recursive detail residency, or learned contribution scoring.
   - Follow docs/perfect-machine-architecture.md before expanding field splat backends, density/extinction packets, sensor-fusion candidate adapters, reservoir guide buffers, occupancy graph state, or stochastic learned priority.
   - Use research/rendering/fractal-brush-implementation-roadmap.md as the actionable execution checklist for fractal brush work.
+  - Next Fensalir art slice: replace the temporary screen-space cathedral guide with a `.aquageo`-owned transparent pane/rune/material field target and feed it to the scene shader as its own texture/buffer, separate from the marsh height field.
   - Next flame reference slice: build a JWildfire import/lowering report that separates supported, approximated, ignored, and rejected variation fields before expanding the GPU op set. Do not hide dialect loss behind successful XML parsing.
   - Next flame renderer slice: mirror FractalFlameIterationState in a GPU UAV so program-flame mode can advance resident sample state over frames instead of replaying all depth from zero per splat. Weighting fields remain explicit rejected diagnostics until they become real DSL operator nodes.
   - Follow docs/zyphos-eusocial-sync.md and E:\Projects\Eusocial Interbeing\Eusocial Interbeing\World\Zyphos Simulation Brief.md before turning Zyphos visual choices into setting claims.
