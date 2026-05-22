@@ -13,4 +13,8 @@ ripple magenta-right 2.4 -0.72 0.64 2.6 -0.12 4.4 0.9 0.004 0.022 17.0 0.17 1.42
 ripple hall-wake 0 1.2 4.8 1.2 0 3.0 1.1 -0.006 0.019 11.0 -0.08 1.25 29 hall-wake
 ifs edge-reeds 3 2 -6.5 -0.8 0.52 1.8 0.48 3.5 0.91 5.0 1.05 0.006 31 reed-shadow
 ifs edge-reeds 3 2 6.5 -0.7 0.52 1.8 0.48 3.5 -0.91 5.0 1.05 0.006 37 reed-shadow
-ifs micro-ripples 4 3 0 -1.6 2.8 1.2 0.42 2.6 0.37 6.2 0.8 0.003 41 micro-ripple
+ifs micro-ripples 3 2 0 -1.6 2.8 1.2 0.42 2.6 0.37 6.2 0.8 0.003 41 micro-ripple
+ifs hall-spires 3 2 0 2.35 5.2 0.42 0.52 2.2 0.0 5.4 1.15 0.028 47 cathedral-spire
+ifs rune-strata 3 2 0 3.15 3.2 0.22 0.46 2.8 0.42 7.0 0.92 0.018 53 cathedral-rune
+ifs magenta-buttress 2 2 -2.4 1.1 1.6 0.28 0.58 2.1 0.72 5.4 1.1 0.020 59 cathedral-magenta
+ifs magenta-buttress 2 2 2.4 1.1 1.6 0.28 0.58 2.1 -0.72 5.4 1.1 0.020 61 cathedral-magenta

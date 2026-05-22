@@ -59,10 +59,13 @@ current_model:
     world_patch: src/Aquarium.Fensalir/Worlds/fensalir-spine-emblem.aquageo
     splash_prompt: research/rendering/fensalir-spine-emblem-ifs-demo.md
     ground_truth_image: src/Aquarium.Engine/Assets/Fensalir-Splash.png
+    fixed_capture: scripts/capture-fensalir-frame.ps1
+    latest_capture: artifacts/fensalir-captures/fixed-cathedral-forward.png
     purpose: >
       First artistic Fensalir reconstruction client: loads a .aquageo scene
       patch, lowers marsh/water surface claims into shaped 2D ripple brushes,
-      and renders the central luminous spine through the normal SDF proxy path.
+      projects cathedral detail from the patch-owned 2D field, and renders the
+      central luminous stacked-diamond spine through the normal SDF proxy path.
   samples:
     minimal_client: src/Aquarium.Sample.Minimal
   dependencies:
@@ -179,6 +182,7 @@ renderer_state:
     - FractalFlameFileParser now has ParseFirstWithReport for import accountability. Receipt runs emit fractal-flame-import-report-*.json beside flame histogram/GPU receipts. The JWildfire selftest report currently records 15 accepted fields, 3 approximations, 45 ignored render/presentation fields, and 11 rejected geometry/sampling fields: wfield_* weighting-field attributes. Successful XML parsing is not successful translation.
     - FractalFlameIterationState and FractalFlameIterationStepper define the persistent flame iteration invariant before GPU lowering: advancing a sample in chunks must match a one-shot advance from the same state. This is a parity/mock boundary for the future GPU state buffer, not a runtime CPU renderer.
     - D3D12 capacity logging now reports active fractal reservoir resident MiB, splat count, visible debug splat count, updates/pass, and candidates/update so the GPU cache has a receipt in normal runtime logs, not just in the standalone benchmark.
+    - Fensalir has a fixed headless art-repro capture lane: `scripts/capture-fensalir-frame.ps1` builds disposable engine/client slots, launches the Fensalir client headless at an explicit resolution, waits for a ready frame, and writes a PNG through `IAquariumRenderer.SaveFramePng`. Headless capture disables overlay debug UI and locks the Fensalir camera/time so shader and `.aquageo` changes can be compared against `src/Aquarium.Engine/Assets/Fensalir-Splash.png` without manual window judgment.
     - The consolidated fractal brush architecture plan defines the intended pipeline: client intent -> domain roots -> semantic IFS brush grammar -> ownership tree -> node summaries -> contribution cache/residency scheduler -> backend packets -> renderer passes -> debug/evidence, with explicit module boundaries and mockable unit-test seams.
     - The Perfect Machine architecture lives in docs/perfect-machine-architecture.md. It is the current waterfall design authority for fast 2D/3D/projected scalar-field splats, Form/Appearance/Transport reservoir layers, SDF level-set surfaces for opaque solids, density/extinction/confidence fields for flames and sensor fusion, IFS `.aquageo` structural probes, Mimir-style camera/audio evidence candidates, ReSTIR/GRIS reservoir reuse, heuristic occupancy graph updates, resource-tier residency, and TAA guide-buffer integration.
     - Fractal surface page planning now has a CPU boundary: FractalSurfacePagePlanner lowers selected IFS cuts into stable height, 2D signed-distance, material, and confidence page metadata; ZyphosFractalRenderPlan exposes these pages, while the live D3D12 page store and atlas remain future work.

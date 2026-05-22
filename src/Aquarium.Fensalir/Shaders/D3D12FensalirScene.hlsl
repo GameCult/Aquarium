@@ -197,16 +197,25 @@ float fractalNoise3(float3 p)
 
 float3 backgroundRadiance(float3 direction)
 {
-    float horizon = smoothstep(-0.24, 0.42, direction.z);
-    float verticalAxis = pow(saturate(1.0 - abs(direction.x) * 6.4), 3.0) * smoothstep(-0.18, 0.72, direction.z);
-    float hall = pow(saturate(1.0 - abs(abs(direction.x) - 0.22) * 12.0), 2.0) * smoothstep(-0.08, 0.58, direction.z);
+    float horizon = smoothstep(-0.28, 0.34, direction.z);
+    float verticalAxis = pow(saturate(1.0 - abs(direction.x) * 7.8), 3.0) * smoothstep(-0.18, 0.76, direction.z);
+    float hall = pow(saturate(1.0 - abs(abs(direction.x) - 0.24) * 11.0), 2.0) * smoothstep(-0.10, 0.62, direction.z);
     float fog = pow(saturate(fractalNoise3(direction * 4.1 + float3(0.0, timeSeconds * 0.015, 0.0)) - 0.18), 2.2);
+    float2 hallPoint = float2(direction.x * 8.0, direction.z * 5.8 + 1.1);
+    float cathedralField = max(0.0, abs(terrainHeight(hallPoint)) - 0.022);
+    float cathedralPane = smoothstep(0.001, 0.016, cathedralField) * smoothstep(-0.22, 0.74, direction.z);
+    float verticalShard = pow(saturate(1.0 - abs(frac((direction.x + 0.5) * 28.0) - 0.5) * 2.0), 22.0);
+    float horizonLine = exp(-abs(direction.z + 0.095) * 34.0);
+    float runeDust = pow(saturate(fractalNoise3(float3(hallPoint * 4.0, 3.0)) - 0.54), 5.0) * cathedralPane;
 
     float3 voidColor = lerp(float3(0.001, 0.006, 0.009), float3(0.018, 0.055, 0.062), horizon);
     float3 cyan = float3(0.50, 1.55, 2.25) * verticalAxis * 0.62;
-    float3 magenta = float3(1.25, 0.12, 0.82) * hall * 0.18;
+    float3 magenta = float3(1.25, 0.12, 0.82) * (hall * 0.16 + horizonLine * 0.11);
     float3 mist = float3(0.12, 0.36, 0.38) * fog * (0.18 + horizon * 0.24);
-    return voidColor + cyan + magenta + mist;
+    float3 cathedral = float3(0.10, 0.66, 0.88) * cathedralPane * (0.22 + verticalShard * 0.35);
+    cathedral += float3(1.15, 0.16, 0.72) * cathedralPane * smoothstep(0.12, 0.52, abs(direction.x)) * 0.16;
+    cathedral += float3(1.0, 0.74, 0.28) * runeDust * 0.22;
+    return voidColor + cyan + magenta + mist + cathedral;
 }
 
 float3 surfaceMirrorRadiance(float3 p, float3 direction, out float3 normal)

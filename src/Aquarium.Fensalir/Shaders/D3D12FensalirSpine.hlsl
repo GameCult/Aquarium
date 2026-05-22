@@ -25,41 +25,69 @@ float sdDiamond(float3 p, float3 radius)
     return (q.x + q.y + q.z - 1.0) * min(radius.x, min(radius.y, radius.z));
 }
 
+float sdDiamondShell(float3 p, float3 radius, float thickness)
+{
+    return abs(sdDiamond(p, radius)) - thickness;
+}
+
+float sdDiamondPane(float3 p, float2 radius, float halfDepth, float thickness)
+{
+    float outline = abs((abs(p.x) / max(radius.x, 0.001)) + (abs(p.z) / max(radius.y, 0.001)) - 1.0) * min(radius.x, radius.y) - thickness;
+    float depth = abs(p.y) - halfDepth;
+    return max(outline, depth);
+}
+
 float fensalirSpineDistance(float3 local)
 {
-    float core = sdCappedCylinderZ(local - float3(0.0, 0.0, 0.18), 0.045, 2.75);
+    float core = sdCappedCylinderZ(local - float3(0.0, 0.0, 0.24), 0.018, 3.05);
     float diamonds = 999.0;
+    float panes = 999.0;
 
-    [unroll]
+    [loop]
     for (int index = 0; index < 8; index++)
     {
         float t = (float)index;
-        float z = -1.34 + t * 0.47;
+        float z = -1.42 + t * 0.52;
         float pulse = 0.5 + 0.5 * sin(timeSeconds * 0.42 + t * 1.7);
-        float side = lerp(0.22, 0.46, smoothstep(0.0, 7.0, t)) * lerp(0.92, 1.08, pulse);
+        float broadMiddle = smoothstep(0.0, 3.5, t) * smoothstep(7.5, 3.5, t);
+        float side = lerp(0.42, 0.88, broadMiddle) * lerp(0.94, 1.04, pulse);
         float3 q = local - float3(0.0, 0.0, z);
-        q.xy = mul(float2x2(cos(t * 0.42), -sin(t * 0.42), sin(t * 0.42), cos(t * 0.42)), q.xy);
-        diamonds = min(diamonds, sdDiamond(q, float3(side, side * 0.58, 0.24)));
+        diamonds = min(diamonds, sdDiamondPane(q, float2(side, 0.31), 0.024, 0.016));
     }
 
-    float haloGlass = sdCappedCylinderZ(local - float3(0.0, 0.0, 0.1), 0.18, 2.45);
-    return min(min(core, diamonds), haloGlass);
+    [loop]
+    for (int paneIndex = 0; paneIndex < 4; paneIndex++)
+    {
+        float side = paneIndex < 2 ? -1.0 : 1.0;
+        float rank = (float)(paneIndex % 2);
+        float x = side * (0.36 + rank * 0.32);
+        float z = -0.82 + rank * 0.78;
+        float3 p = local - float3(x, 0.02, z);
+        p.x -= side * p.z * (0.16 + rank * 0.08);
+        panes = min(panes, sdRoundBox(p, float3(0.014, 0.018, 1.35 - rank * 0.16), 0.012));
+    }
+
+    return min(core, min(diamonds, panes));
 }
 
 float fensalirPillarDistance(float3 local)
 {
     float pillars = 999.0;
-    [unroll]
-    for (int index = 0; index < 4; index++)
+    [loop]
+    for (int index = 0; index < 12; index++)
     {
-        float side = index < 2 ? -1.0 : 1.0;
-        float rank = (float)(index % 2);
-        float x = side * (1.1 + rank * 0.82);
-        float y = 0.34 + rank * 0.42;
+        float side = index < 6 ? -1.0 : 1.0;
+        float rank = (float)(index % 6);
+        float x = side * (0.92 + rank * 0.38);
+        float y = 0.32 + rank * 0.16;
         float3 p = local - float3(x, y, 0.0);
-        float lean = side * (0.08 + rank * 0.04);
+        float lean = side * (0.06 + rank * 0.018);
         p.x -= p.z * lean;
-        pillars = min(pillars, sdRoundBox(p, float3(0.028 + rank * 0.012, 0.055, 2.55), 0.018));
+        pillars = min(pillars, sdRoundBox(p, float3(0.015 + rank * 0.003, 0.038, 2.15 + rank * 0.19), 0.012));
+
+        float3 rib = local - float3(side * (0.7 + rank * 0.34), y - 0.1, -1.2 + rank * 0.28);
+        rib.x -= side * rib.z * 0.34;
+        pillars = min(pillars, sdRoundBox(rib, float3(0.012, 0.028, 0.72), 0.01));
     }
 
     return pillars;
@@ -119,14 +147,14 @@ SdfSurface sdfSurface(float3 p, int sdfIndex)
     {
         surface.baseColor = float3(0.35, 0.86, 0.98);
         surface.roughness = 0.06;
-        surface.emission = float3(0.35, 1.55, 2.45) * (1.2 + coreGlow * 4.0 + rune * 1.8);
+        surface.emission = float3(0.35, 1.55, 2.45) * (2.0 + coreGlow * 5.6 + rune * 2.4);
     }
     else if (nearest == pillars)
     {
         surface.baseColor = float3(0.018, 0.030, 0.034);
         surface.metallic = 0.35;
         surface.roughness = 0.34;
-        surface.emission = float3(0.75, 0.03, 0.48) * (0.08 + magentaEdge);
+        surface.emission = float3(0.75, 0.03, 0.48) * (0.13 + magentaEdge + rune * 0.10);
     }
     else
     {

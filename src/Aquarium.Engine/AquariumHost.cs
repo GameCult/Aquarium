@@ -15,8 +15,9 @@ public static class AquariumHost
         using var runtimeLoader = new ClientRuntimeLoader(runtimeOptions, ParseClientAssemblyPath(args), ParseClientReloadPointerPath(args));
         var runtime = runtimeLoader.Load();
         var input = new InputState();
-        var width = runtime.Options.Headless ? 640 : 1280;
-        var height = runtime.Options.Headless ? 360 : 720;
+        var headlessSize = ParseHeadlessSize(args);
+        var width = runtime.Options.Headless ? headlessSize.Width : 1280;
+        var height = runtime.Options.Headless ? headlessSize.Height : 720;
         var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "Fensalir-Icon.ico");
         var splashPath = Path.Combine(AppContext.BaseDirectory, "Assets", "Fensalir-Splash.bmp");
         using var window = Win32Window.Create("Fensalir", width, height, input, iconPath, splashPath, visible: !runtime.Options.Headless);
@@ -30,6 +31,7 @@ public static class AquariumHost
             runtime.RenderPlan,
             runtime.GraphicsSettings,
             message => window.PaintSplash("Fensalir", message));
+        renderer.DebugUiVisible = !runtime.Options.Headless;
         var settingsRuntime = runtimeLoader.Runtime;
 
         var frameClock = Stopwatch.StartNew();
@@ -37,6 +39,8 @@ public static class AquariumHost
         var frames = 0;
         var readyFrames = 0;
         var requiredReadyFrames = ParseHeadlessReadyFrames();
+        var captureFramePath = ParseCaptureFramePath(args);
+        var capturedFrame = false;
 
         while (true)
         {
@@ -51,6 +55,11 @@ public static class AquariumHost
             lastFrame = now;
 
             renderer.UpdateUi(input, runtimeLoader.Runtime.Ui);
+            if (runtime.Options.Headless)
+            {
+                renderer.DebugUiVisible = false;
+            }
+
             var runtimeInput = renderer.CapturesInput ? input.WithoutInteractiveInput() : input;
             if (!renderer.CapturesInput)
             {
@@ -81,6 +90,16 @@ public static class AquariumHost
                 readyFrames++;
             }
 
+            if (runtime.Options.Headless
+                && !capturedFrame
+                && !string.IsNullOrWhiteSpace(captureFramePath)
+                && readyFrames >= requiredReadyFrames)
+            {
+                renderer.SaveFramePng(captureFramePath);
+                Console.WriteLine($"Headless Aquarium frame captured: {Path.GetFullPath(captureFramePath)}");
+                capturedFrame = true;
+            }
+
             if (runtime.Options.Headless && frames >= 2 && readyFrames >= requiredReadyFrames)
             {
                 Console.WriteLine("Headless Aquarium completed requested frames.");
@@ -101,6 +120,27 @@ public static class AquariumHost
         return int.TryParse(Environment.GetEnvironmentVariable("AQUARIUM_HEADLESS_READY_FRAMES"), out var value)
             ? Math.Max(1, value)
             : 1;
+    }
+
+    private static (int Width, int Height) ParseHeadlessSize(IReadOnlyCollection<string> args)
+    {
+        var width = ParsePositiveIntArgument(args, "--headless-width", "AQUARIUM_HEADLESS_WIDTH", 640);
+        var height = ParsePositiveIntArgument(args, "--headless-height", "AQUARIUM_HEADLESS_HEIGHT", 360);
+        return (width, height);
+    }
+
+    private static string? ParseCaptureFramePath(IReadOnlyCollection<string> args)
+    {
+        var values = args.ToArray();
+        for (var index = 0; index < values.Length - 1; index++)
+        {
+            if (string.Equals(values[index], "--capture-frame", StringComparison.OrdinalIgnoreCase))
+            {
+                return values[index + 1];
+            }
+        }
+
+        return Environment.GetEnvironmentVariable("AQUARIUM_CAPTURE_FRAME");
     }
 
     private static string? ParseCachePath(IReadOnlyCollection<string> args)
@@ -178,6 +218,23 @@ public static class AquariumHost
         return int.TryParse(Environment.GetEnvironmentVariable("AQUARIUM_RENDER_DEBUG_MODE"), out var environmentMode)
             ? environmentMode
             : null;
+    }
+
+    private static int ParsePositiveIntArgument(IReadOnlyCollection<string> args, string name, string environmentName, int fallback)
+    {
+        var values = args.ToArray();
+        for (var index = 0; index < values.Length - 1; index++)
+        {
+            if (string.Equals(values[index], name, StringComparison.OrdinalIgnoreCase)
+                && int.TryParse(values[index + 1], out var value))
+            {
+                return Math.Max(1, value);
+            }
+        }
+
+        return int.TryParse(Environment.GetEnvironmentVariable(environmentName), out var environmentValue)
+            ? Math.Max(1, environmentValue)
+            : fallback;
     }
 
     private static IAquariumRenderer CreateRenderer(

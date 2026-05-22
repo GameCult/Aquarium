@@ -16,7 +16,11 @@ public sealed class FensalirFractalSceneTests
         Assert.Contains(tree.Domains, domain => domain.Kind == AquariumFractalDomainKind.Object3D && domain.Key.Value == "fensalir/spine");
         Assert.Contains(tree.Claims, claim => claim.Tags == "cyan-ripple" && claim.WaveAmplitude > 0.0f);
         Assert.Contains(tree.Claims, claim => claim.Tags == "micro-ripple");
+        Assert.Contains(tree.Claims, claim => claim.Tags == "cathedral-spire");
+        Assert.Contains(tree.Claims, claim => claim.Tags == "cathedral-rune");
+        Assert.Contains(tree.Claims, claim => claim.Tags == "cathedral-magenta");
         Assert.Equal(tree.Claims.Count(claim => claim.PayloadKind == AquariumFractalPayloadKind.Height), brushes.Length);
+        Assert.True(brushes.Length <= 64);
         Assert.Contains(brushes, brush => brush.WaveAmplitude > 0.0f && brush.WaveFrequency > 0.0f && brush.WaveSinePower > 0.0f);
         Assert.Contains("surface brushes", FensalirFractalScene.Summary, StringComparison.Ordinal);
     }

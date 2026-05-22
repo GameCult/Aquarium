@@ -130,6 +130,15 @@ public sealed class FensalirRuntime : IAquariumRuntime
     internal void SetOptions(AquariumRuntimeOptions options)
     {
         Options = options;
+        if (options.Headless)
+        {
+            autoDrift = false;
+            timeSeconds = 4.0f;
+            previousTimeSeconds = timeSeconds - (1.0f / 60.0f);
+            orbitYaw = 0.0f;
+            orbitPitch = 0.12f;
+            orbitDistance = 6.1f;
+        }
     }
 
     private Vector3 ComposeCamera(Vector3 target)
