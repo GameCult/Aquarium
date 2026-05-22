@@ -44,7 +44,7 @@ public sealed class AquariumAudioDocument
                 byteIndex += 2;
             }
 
-            mono[frame] = Math.Clamp(sum / channels * safeGain, -1.0f, 1.0f);
+            mono[frame] = Math.Clamp(sum / channels, -1.0f, 1.0f);
         }
 
         var safePan = Math.Clamp(pan, -1.0f, 1.0f);
