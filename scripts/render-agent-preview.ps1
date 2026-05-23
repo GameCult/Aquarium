@@ -21,11 +21,11 @@ if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
 New-Item -ItemType Directory -Force -Path $slotPath | Out-Null
 New-Item -ItemType Directory -Force -Path $OutputDirectory | Out-Null
 
-Write-Host "Building isolated preview renderer:"
+Write-Host "Building isolated Epiphany preview renderer:"
 Write-Host "  $slotPath"
 dotnet build $projectPath -c Debug -o $slotPath /p:UseAppHost=true
 if ($LASTEXITCODE -ne 0) {
-    throw "preview build failed with exit code $LASTEXITCODE."
+    throw "Preview build failed with exit code $LASTEXITCODE."
 }
 
 $exePath = Join-Path $slotPath "Aquarium.Epiphany.AgentPreview.exe"
@@ -41,7 +41,7 @@ if (-not (Test-Path $exePath)) {
     --frames $FramesPerView `
     --time $TimeSeconds
 if ($LASTEXITCODE -ne 0) {
-    throw "preview render failed with exit code $LASTEXITCODE."
+    throw "Preview render failed with exit code $LASTEXITCODE."
 }
 
 Write-Host "Preview frames written:"

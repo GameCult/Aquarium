@@ -8,7 +8,7 @@ Aquarium uses CultLib directly for runtime identity and reload recovery.
 it to a `CultCache`. The dev scripts pass:
 
 ```powershell
---cache E:\Projects\Aquarium-Engine\artifacts\dev-reload\cultcache\aquarium-client.msgpack
+--cache E:\Projects\Fensalir\artifacts\dev-reload\cultcache\aquarium-client.msgpack
 ```
 
 Direct runs can also use `--cache <path>` or `AQUARIUM_CULTCACHE_PATH`.

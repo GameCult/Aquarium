@@ -8,7 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Aquarium.Engine\Aquarium.Engine.csproj" />
+    <ProjectReference Include="..\..\..\Fensalir\src\Aquarium.Engine\Aquarium.Engine.csproj" />
     <ProjectReference Include="..\Aquarium.Epiphany\Aquarium.Epiphany.csproj" />
   </ItemGroup>
 
