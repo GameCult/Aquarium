@@ -14,7 +14,7 @@
     "repo_split": [
       "Fensalir now lives in the adjacent repo at E:\\Projects\\Fensalir and owns the native host, renderer, contracts, fractal machinery, audio host, reload scripts, and engine demos.",
       "This repo is Aquarium: the Epiphany visual client, src/Aquarium.Epiphany plus the Epiphany agent preview tool.",
-      "The local/upstream name Aquarium-Engine is transitional; visitor docs should call the machine Aquarium.",
+      "The upstream is https://github.com/GameCult/Aquarium. The local folder may still be E:\\Projects\\Aquarium-Engine, but visitor docs should call the machine Aquarium.",
       "Project references intentionally point to sibling Fensalir source projects until a package boundary exists. Do not copy renderer contracts or host scripts back into this repo."
     ],
     "client_ownership": [
@@ -31,6 +31,6 @@
     "A client repo with copied renderer/runtime code is just a split repo lying badly.",
     "Do not add Epiphany nouns to Fensalir to fix missing client context.",
     "Do not preserve stale Fensalir-runtime docs here because they used to be true.",
-    "Do not let the transitional Aquarium-Engine name become product identity."
+    "Do not let the local Aquarium-Engine checkout name become product identity."
   ]
 }

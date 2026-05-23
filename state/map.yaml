@@ -1,8 +1,7 @@
 project:
   name: Aquarium
   root: E:\Projects\Aquarium-Engine
-  upstream_current: https://github.com/GameCult/Aquarium-Engine
-  upstream_expected: https://github.com/GameCult/Aquarium
+  upstream: https://github.com/GameCult/Aquarium
   purpose: >
     Aquarium is Epiphany's native visual client for the adjacent Fensalir
     runtime. This repo owns agent SDF bodies, client state,
@@ -39,6 +38,6 @@ invariants:
 next_actions:
   - Keep `dotnet build EpiphanyAquarium.sln` green against the adjacent Fensalir source dependency.
   - Keep wrapper scripts thin; do not copy Fensalir host scripts back into this repo.
-  - Treat Aquarium-Engine as a transitional checkout/upstream name; visitor docs should say Aquarium.
+  - Treat Aquarium-Engine as a local checkout name only; visitor docs and upstream identity should say Aquarium.
   - Move any remaining Fensalir-owned runtime documentation or state to `E:\Projects\Fensalir` when found.
   - When Fensalir has packages, replace sibling source references with deliberate package references.

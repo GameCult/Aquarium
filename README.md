@@ -10,8 +10,8 @@ Life, the cursor, the Grid, Face voice routing, client state, and the
 Epiphany-specific SDF body language.
 
 This repo is currently checked out at `E:\Projects\Aquarium-Engine`; upstream is
-expected to become `GameCult/Aquarium`. The old name is logistics. The machine
-is Aquarium.
+`GameCult/Aquarium`. The local folder name is logistics. The machine is
+Aquarium.
 
 Fensalir supplies the native host, D3D12 renderer, hot reload, audio output, and
 shared contracts. Aquarium supplies the meaning, layout, state documents, voice
