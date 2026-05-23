@@ -1,5 +1,9 @@
 # Aquarium
 
+<p align="center">
+  <img src="Aquarium-Icon.png" alt="Aquarium logo" width="260" />
+</p>
+
 Aquarium is Epiphany's native visual body. It is the client that turns Epiphany
 state into a spatial scene: Self, Face, Imagination, Eyes, Body, Hands, Soul,
 Life, the cursor, the Grid, Face voice routing, client state, and the
