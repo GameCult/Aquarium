@@ -1,25 +1,64 @@
 # Epiphany Aquarium
 
-Epiphany Aquarium is the Epiphany-owned client for the Fensalir native runtime.
-This repo owns client semantics: agent bodies, camera intent, CultCache state,
-CultNet interpretation, voice surfaces, and Epiphany-specific shaders.
+Epiphany Aquarium is the Epiphany-facing visual client that runs on the
+Fensalir native runtime. It owns the living scene semantics: agent bodies,
+camera behavior, CultCache state, CultNet interpretation, Face voice routing,
+and Epiphany-specific shaders.
 
-Fensalir owns the window, renderer, D3D12 backend, audio device path, hot reload,
-debug chrome, contracts, fractal machinery, and engine demos. It lives next to
-this repo at `E:\Projects\Fensalir`.
+Fensalir owns the host and renderer. This repo tells that runtime what Epiphany
+looks like and how it behaves.
 
-## Repository Shape
+## What Runs
 
-- `src/Aquarium.Epiphany`: the runtime loaded by the Fensalir host.
-- `src/Aquarium.Epiphany.AgentPreview`: isolated Epiphany agent preview tool.
-- `docs`: Epiphany/client boundary notes.
-- `state`: repo memory, map, evidence, and scratch state for the client.
-- `scripts`: thin wrappers that delegate host/watch/reload work to Fensalir.
+The runtime in `src/Aquarium.Epiphany` implements `IAquariumRuntime`. Fensalir
+loads it, calls its update/frame methods, and renders the declared scene:
 
-The client references Fensalir source projects directly while the package
-boundary is still young. Do not copy engine contracts back into this repo.
+```text
+Fensalir host
+  -> Aquarium.Epiphany runtime
+  -> Epiphany render plan + scene state
+  -> agent/body SDF proxy shaders
+  -> CultCache-backed client state
+  -> optional Face realtime voice audio
+```
+
+The visible scene currently has:
+
+- a Grid/height-field surface driven by Epiphany brush state;
+- Self plus seven role-agent SDF bodies: Face, Imagination, Eyes, Body, Hands,
+  Soul, and Life;
+- a cursor body;
+- Epiphany-authored body shaders under `src/Aquarium.Epiphany/Shaders`;
+- a debug panel for runtime controls, state flushing, Face voice endpoints, and
+  local realtime transcript counters.
+
+## Projects
+
+- `src/Aquarium.Epiphany`: runtime, render plan, scene builder, persistent
+  state, voice routing, camera rig, and shaders.
+- `src/Aquarium.Epiphany.AgentPreview`: isolated preview tool for rendering one
+  Epiphany agent body through the real Fensalir renderer.
+- `scripts`: thin wrappers around Fensalir dev scripts, plus the agent preview
+  renderer.
+- `docs`: client visual grammar and engine/client boundary notes.
+- `state`: repo-local memory, map, evidence, and scratch state.
+
+## Dependency
+
+This repo currently references sibling Fensalir source projects at
+`E:\Projects\Fensalir`. That is intentional until Fensalir has a packaged API.
+
+Do not copy engine contracts or renderer helpers into this repo. If Epiphany
+needs new renderer authority, add it in Fensalir and consume it through the
+contract.
 
 ## Build
+
+Requirements:
+
+- Windows
+- .NET SDK matching `global.json`
+- sibling repos at `E:\Projects\Fensalir` and `E:\Projects\CultLib`
 
 ```powershell
 dotnet build EpiphanyAquarium.sln
@@ -27,28 +66,45 @@ dotnet build EpiphanyAquarium.sln
 
 ## Run
 
+Launch through Fensalir:
+
 ```powershell
 .\scripts\dev-reload.ps1
 ```
 
-The wrapper calls `E:\Projects\Fensalir\scripts\dev-reload.ps1` with
-`src\Aquarium.Epiphany\Aquarium.Epiphany.csproj` as the client project.
-
-For a headless smoke:
+Run headless:
 
 ```powershell
 .\scripts\dev-reload.ps1 -Headless -RetainSlots 4
 ```
 
-For the watcher:
+Watch and reload on source changes:
 
 ```powershell
 .\scripts\dev-watch.ps1
 ```
 
-## Boundary
+Render isolated agent preview frames:
 
-Epiphany may depend on Fensalir contracts and renderer services. Fensalir must
-not depend on Epiphany policy, role names, CultNet surfaces, or client layout.
-If a change needs new engine authority, make it in `E:\Projects\Fensalir` first
-and consume the resulting contract here.
+```powershell
+.\scripts\render-agent-preview.ps1 -Agent Soul
+```
+
+## State
+
+Epiphany Aquarium persists typed client state through CultCache:
+
+- camera target, yaw, pitch, distance, and runtime time;
+- renderer presentation settings owned by shared contracts;
+- Face voice endpoint rows, prompts, routing state, and transport settings.
+
+Speech transcript counters are local runtime surface, not durable Epiphany
+memory.
+
+## Docs
+
+- `docs/epiphany-agent-sdf-visual-language.md`: renderer-facing visual grammar
+  for Epiphany organs.
+- `docs/engine-client-boundary.md`: what this repo owns versus Fensalir.
+- `docs/cult-runtime-surface.md`: client CultCache document surface.
+- `state/README.md`: persistent state machinery.
