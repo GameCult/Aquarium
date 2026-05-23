@@ -1,10 +1,11 @@
-# Epiphany Aquarium Instructions
+# Aquarium Instructions
 
 ## Purpose
 
-This repo is the Epiphany Aquarium client. It owns Epiphany-facing runtime
-semantics, agent visuals, CultCache documents, CultNet interpretation, voice
-surfaces, and client-authored render plans.
+This repo is Aquarium: Epiphany's native visual client. It owns
+Epiphany-facing runtime semantics, SDF agent visuals, CultCache documents,
+CultNet interpretation, voice surfaces, Grid layout, and client-authored render
+plans.
 
 The native host and renderer live in the adjacent Fensalir repo:
 `E:\Projects\Fensalir`.
@@ -19,13 +20,14 @@ The native host and renderer live in the adjacent Fensalir repo:
 - CultCache documents are typed client state, not loose JSON sidecars.
 - CultNet surfaces are semantic input. Spatial placement, body projection, and
   renderer budget belong to the client/runtime contract, not to chat folklore.
-- If an engine capability is missing, add it in Fensalir and consume it here.
-  Do not build a small private engine because the real one is across the hall.
+- If renderer/runtime authority is missing, add it in Fensalir and consume it
+  here. Do not build a small private renderer because the real one is across
+  the hall.
 
 ## Persistent State
 
 - `state/map.yaml` is the canonical client map.
-- `state/memory.json` is durable Epiphany Aquarium doctrine and taste.
+- `state/memory.json` is durable Aquarium doctrine and taste.
 - `state/evidence.jsonl` stores lessons that should change future behavior.
 - `state/scratch.md` is disposable working context for the active slice.
 

@@ -1,6 +1,6 @@
 # Persistent State
 
-This directory is Epiphany Aquarium's repo-local memory.
+This directory is Aquarium's repo-local memory.
 
 - `map.yaml` is the current client ownership map.
 - `memory.json` is durable operating memory for future agents.

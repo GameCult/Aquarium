@@ -1,32 +1,37 @@
-# Epiphany Aquarium
+# Aquarium
 
-Epiphany Aquarium is the visual body for Epiphany. It is a native client that
-runs on the Fensalir runtime and turns agent state into an embodied scene:
-camera, Grid, Self, role bodies, cursor, voice controls, durable client state,
-and Epiphany-specific shaders.
+Aquarium is Epiphany's native visual body. It is the client that turns Epiphany
+state into a spatial scene: Self, Face, Imagination, Eyes, Body, Hands, Soul,
+Life, the cursor, the Grid, Face voice routing, client state, and the
+Epiphany-specific SDF body language.
 
-Fensalir owns the host, renderer, hot reload, audio output, and reusable field
-machinery. This repo owns what the Aquarium is and what its inhabitants mean.
+This repo is currently checked out at `E:\Projects\Aquarium-Engine`; upstream is
+expected to become `GameCult/Aquarium`. The old name is logistics. The machine
+is Aquarium.
+
+Fensalir supplies the native host, D3D12 renderer, hot reload, audio output, and
+shared contracts. Aquarium supplies the meaning, layout, state documents, voice
+surface, render plan, and SDF shaders that make the scene Epiphany instead of a
+generic renderer demo.
 
 ## What The Client Is
 
-The Aquarium is not a dashboard with a decorative viewport. The viewport is the
-client. It is a live spatial interface where Epiphany appears as bodies in a
-field:
+Aquarium is not an engine repo and not a dashboard with a viewport bolted on.
+The viewport is the client. Epiphany appears as bodies in a field:
 
-- `Self` is the central body and light source.
-- Seven role agents orbit and inhabit the scene: `Face`, `Imagination`, `Eyes`,
-  `Body`, `Hands`, `Soul`, and `Life`.
+- `Self` is the central body, coordinator anchor, and scene light.
+- `Face`, `Imagination`, `Eyes`, `Body`, `Hands`, `Soul`, and `Life` are
+  orbiting role bodies with distinct anatomy and materials.
 - The cursor is a scene body with current and previous world-space state.
 - The Grid is a height-field surface shaped by Self, role wells, and cursor
   pressure.
 - The camera is an orbit rig around the Grid center, persisted through
   CultCache.
-- Overlay UI exists for runtime control, but the scene is the primary machine.
+- Overlay UI exists for runtime control, but the embodied scene is the app.
 
-The project is currently a client runtime, an isolated agent preview tool, docs,
-scripts, and persistent repo memory. The rest of the old reusable engine has
-been moved into the adjacent Fensalir repo.
+The repo contains the Aquarium runtime, an isolated agent preview tool, docs,
+scripts, and persistent project memory. Reusable host/renderer machinery lives
+next door in Fensalir.
 
 ## Runtime Loop
 
@@ -40,18 +45,44 @@ Fensalir host
   -> orbit camera + input projection
   -> Epiphany scene builder
   -> Epiphany render plan
-  -> SDF body shaders + height-field passes
+  -> Grid height-field brushes
+  -> Epiphany SDF body shaders
   -> Face voice routing and optional PCM audio
 ```
 
-`AquariumRuntime` owns the live client state. It loads typed state documents,
+`AquariumRuntime` owns live client state. It loads typed CultCache documents,
 keeps camera/runtime settings warm, saves on a short cadence, builds the
 Epiphany debug panel, accepts runtime UI commands, and composes each frame.
 
-The panel currently exposes time pause/scrub, explicit state flush, graphics
-settings, Face voice endpoint rows, prompts, routing state, transcript counters,
-and transport status. It is operational surface, not the identity of the app.
-The app is the embodied scene it controls.
+The panel exposes time pause/scrub, explicit state flush, graphics settings,
+Face voice endpoint rows, prompts, routing state, transcript counters, and
+transport status. It is operational surface. The app is still the spatial body
+it controls.
+
+## SDF Body Work
+
+Aquarium's current visual language is analytic SDF role bodies over the Grid.
+The body shaders live under `src/Aquarium.Epiphany/Shaders`; the design contract
+lives in `docs/epiphany-agent-sdf-visual-language.md`.
+
+The live rules are:
+
+- each organ gets a distinct SDF family, not a color swap;
+- each shader exposes a cheap bound/hit distance and a refined surface material;
+- material regions stay inside the role shader: core, shell, tool edge, lens,
+  ribbon, memory seed, bubble, risk seam, and similar readable anatomy;
+- state should move low-dimensional parameters first: radius, lobe count,
+  twist, aperture, rib spacing, pulse phase, shell openness, wake length;
+- interaction roots must stay stable even while bodies breathe, fold, shimmer,
+  or speak;
+- role placement is Aquarium-owned world-space layout, derived from Epiphany
+  semantic state rather than supplied as world coordinates by Epiphany.
+
+The eight bodies are not a single heroic scene march. Aquarium renders bounded
+per-agent SDF proxy objects so role anatomy remains readable and cost remains
+inspectable. The agent preview tool exists to render one body through the real
+Fensalir renderer without dragging the whole client loop into every visual
+iteration.
 
 ## Visible Machine
 
@@ -68,22 +99,32 @@ The current scene contains:
 - cursor projection from screen space onto the Grid plane;
 - normalized state scalars passed into shaders for each body.
 
-`EpiphanyRenderPlan` declares the actual pass structure: height-field,
-HDR scene, SDF proxies, bloom/presentation, DirectWrite overlay, and debug
-views for the height field and scene. Body appearance lives in
-`src/Aquarium.Epiphany/Shaders`, including dedicated shaders for Self, Face,
-Imagination, Eyes, Body, Hands, Soul, Life, and the cursor.
+`EpiphanyRenderPlan` declares the pass structure: height-field, HDR scene, SDF
+proxies, bloom/presentation, DirectWrite overlay, and debug views for the height
+field and scene.
 
-The visual grammar is documented in
-`docs/epiphany-agent-sdf-visual-language.md`. Change that before teaching the
-bodies a new language by accident. Yes, this is how the furniture starts
-talking back.
+## Epiphany Integration
+
+Aquarium owns the projection from Epiphany's semantic surfaces into visible
+spatial state. The SDF visual-language document names the intended inputs:
+agent memory, heartbeat, role surfaces, role results, coordinator state, Face
+surface, jobs, pressure, and reorientation documents.
+
+Those documents are normalized into bounded visual fields such as activity,
+readiness, load, blocked/completed state, heartbeat phase, wake intensity,
+memory resonance, pressure, review state, risk, confidence, evidence gaps,
+speaking state, job count, home orbit slot, expressive offset, gravity-well
+pulse, lift, and trait activations.
+
+Epiphany supplies meaning. Aquarium owns the spatial projection and SDF
+language. Fensalir renders the pixels.
 
 ## Face Voice Surface
 
-Face voice routing is client-owned because it is Epiphany meaning, not engine
-meaning. The runtime stores endpoint rows, voices, prompts, enablement, active
-thread, audible radius, and auto-route settings through CultCache-backed state.
+Face voice routing is Aquarium state because it is Epiphany meaning, not
+renderer machinery. The runtime stores endpoint rows, voices, prompts,
+enablement, active thread, audible radius, and auto-route settings through
+CultCache-backed state.
 
 When enabled, the Face voice surface can start active or enabled endpoints,
 stop active speech, clear local transcript counters, and route speech by the
@@ -98,7 +139,8 @@ which Face should speak and why.
   Epiphany agent body through the real Fensalir renderer.
 - `scripts`: wrappers around Fensalir dev scripts, plus the agent preview
   renderer.
-- `docs`: client visual grammar and engine/client boundary notes.
+- `docs`: SDF visual grammar, CultCache state surface, and Fensalir dependency
+  notes.
 - `state`: repo-local memory, map, evidence, and scratch state.
 
 ## Dependency
@@ -106,10 +148,10 @@ which Face should speak and why.
 This repo currently references sibling Fensalir source projects at
 `E:\Projects\Fensalir`. That is intentional until Fensalir has a packaged API.
 
-Do not copy engine contracts or renderer helpers into this repo. If Epiphany
-needs new renderer authority, add it in Fensalir and consume it through the
-contract. If a behavior names Epiphany roles, client voice policy, agent
-meaning, or scene semantics, it belongs here.
+Do not copy renderer contracts, host scripts, or D3D12 helpers into Aquarium.
+If Aquarium needs new renderer authority, add it in Fensalir and consume it
+through contracts. If a behavior names Epiphany roles, client voice policy,
+agent meaning, SDF anatomy, or scene semantics, it belongs here.
 
 ## Build
 
@@ -151,7 +193,7 @@ Render isolated agent preview frames:
 
 ## State
 
-Epiphany Aquarium persists typed client state through CultCache:
+Aquarium persists typed client state through CultCache:
 
 - camera target, yaw, pitch, distance, and runtime time;
 - renderer presentation settings owned by shared contracts;
@@ -162,8 +204,8 @@ memory.
 
 ## Docs
 
-- `docs/epiphany-agent-sdf-visual-language.md`: renderer-facing visual grammar
-  for Epiphany bodies.
-- `docs/engine-client-boundary.md`: what this repo owns versus Fensalir.
+- `docs/epiphany-agent-sdf-visual-language.md`: SDF visual grammar for
+  Epiphany bodies.
 - `docs/cult-runtime-surface.md`: client CultCache document surface.
+- `docs/fensalir-dependency.md`: what Aquarium consumes from Fensalir.
 - `state/README.md`: persistent state machinery.
