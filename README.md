@@ -9,14 +9,23 @@ state into a spatial scene: Self, Face, Imagination, Eyes, Body, Hands, Soul,
 Life, the cursor, the Grid, Face voice routing, client state, and the
 Epiphany-specific SDF body language.
 
-This repo is currently checked out at `E:\Projects\Aquarium-Engine`; upstream is
-`GameCult/Aquarium`. The local folder name is logistics. The machine is
-Aquarium.
-
 Fensalir supplies the native host, D3D12 renderer, hot reload, audio output, and
 shared contracts. Aquarium supplies the meaning, layout, state documents, voice
 surface, render plan, and SDF shaders that make the scene Epiphany instead of a
 generic renderer demo.
+
+## Front Door
+
+- **Value:** the spatial client for Epiphany: a scene of analytic SDF role bodies (Self, Face, Imagination, Eyes, Body, Hands, Soul, Life) orbiting a height-field Grid, with a Face voice-routing surface and typed CultCache client state.
+- **Problem:** Epiphany's organs are state documents. Aquarium gives each organ a readable, bounded body so an operator can see the machine instead of reading a dashboard.
+- **Entry points:**
+  - `src/Aquarium.Epiphany`: the `IAquariumRuntime` Fensalir loads each frame (`AquariumRuntime.cs`, `EpiphanySceneBuilder.cs`, `EpiphanyRenderPlan.cs`, `Shaders/`, `Voice/`, `State/`).
+  - `src/Aquarium.Epiphany.AgentPreview`: renders one body through the real Fensalir renderer; run it with `scripts/render-agent-preview.ps1 -Agent Soul`.
+  - `docs/epiphany-agent-sdf-visual-language.md`: the SDF design contract for every body.
+  - `scripts/dev-reload.ps1`: launch the client through Fensalir (see Run below).
+- **Live:** the runtime loop, scene builder, render plan, role-body shaders, orbit camera, CultCache client state, and Face voice routing state.
+- **Planned:** projecting live Epiphany documents (memory, heartbeat, pressure, role results) into the bodies. Today `EpiphanySceneBuilder` drives each role's activity, heartbeat and pressure from synthetic functions of time; the visual-language document names the intended inputs.
+- **Build:** Windows only. Needs sibling `Fensalir` and `CultLib` checkouts (see Dependency and Building against CultLib).
 
 ## What The Client Is
 
@@ -114,7 +123,7 @@ spatial state. The SDF visual-language document names the intended inputs:
 agent memory, heartbeat, role surfaces, role results, coordinator state, Face
 surface, jobs, pressure, and reorientation documents.
 
-Those documents are normalized into bounded visual fields such as activity,
+Planned, not yet wired: those documents are normalized into bounded visual fields such as activity,
 readiness, load, blocked/completed state, heartbeat phase, wake intensity,
 memory resonance, pressure, review state, risk, confidence, evidence gaps,
 speaking state, job count, home orbit slot, expressive offset, gravity-well
@@ -150,7 +159,7 @@ which Face should speak and why.
 ## Dependency
 
 This repo currently references sibling Fensalir source projects at
-`E:\Projects\Fensalir`. That is intentional until Fensalir has a packaged API.
+`..\Fensalir` (a `Fensalir` checkout next to this one). That is intentional until Fensalir has a packaged API.
 
 Do not copy renderer contracts, host scripts, or D3D12 helpers into Aquarium.
 If Aquarium needs new renderer authority, add it in Fensalir and consume it
@@ -163,7 +172,7 @@ Requirements:
 
 - Windows
 - .NET SDK matching `global.json`
-- sibling repos at `E:\Projects\Fensalir` and `E:\Projects\CultLib`
+- sibling checkouts `..\Fensalir` and `..\CultLib`
 
 ```powershell
 dotnet build EpiphanyAquarium.sln
